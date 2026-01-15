@@ -124,13 +124,11 @@ class MockController[T]:
         for method_name, expectations in self._expectations.items():
             if expectations:
                 unsatisfied.append(
-                    f"{method_name}: {len(expectations)} unsatisfied expectation(s)"
+                    f"missing {len(expectations)} call(s) to '{method_name}'"
                 )
 
         if unsatisfied:
-            msg = "Unsatisfied expectations:\n" + "\n".join(
-                f"  - {e}" for e in unsatisfied
-            )
+            msg = f"Unsatisfied expectations:\n{'\n'.join(unsatisfied)}"
             raise AssertionError(msg)
 
     def reset(self) -> None:
@@ -195,12 +193,18 @@ class _MockProxyImpl[T]:
 
         for key, want_value in want_kwargs.items():
             if key not in got_kwargs:
-                diffs.append(f"expected {key}={want_value}, but '{key}' is missing")
+                diffs.append(f"expected {key}={want_value!r}, but '{key}' is missing")
                 continue
 
             got_value = got_kwargs[key]
             if got_value != want_value:
-                diffs.append(f"expected {key}={want_value}, but got {key}={got_value}")
+                diffs.append(
+                    f"expected {key}={want_value!r}, but got {key}={got_value!r}"
+                )
+
+        for key in got_kwargs.keys():
+            if key not in want_kwargs:
+                diffs.append(f"unexpected {key}={got_kwargs[key]!r}")
 
         if diffs:
             raise AssertionError(
