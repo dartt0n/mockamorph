@@ -3,7 +3,7 @@
 Lightweight interface mocking library for Python for expectation-driven testing.
 
 > [!NOTE]
-> I hate monkey-patching using string-literals in tests. I created `mockamorph` library to simply testing code, inspired by [uber-go/mock](https://github.com/uber-go/mock).
+> I hate monkey-patching using string-literals in tests. I created the `mockamorph` library to simplify testing code, inspired by [uber-go/mock](https://github.com/uber-go/mock).
 
 > [!WARNING]
 > Code is written with AI assistance. List of tools used:
@@ -59,7 +59,7 @@ def test_user_service():
 
 ## Motivation
 
-When we write code with SOLID principles in mind, there are many interfaces and usecases in our code that depend on interfaces. In production, we use adapters as concrete implementations for those interfaces, but in tests we need to rely on mocks in order to test business logic of usecases.
+When we write code with SOLID principles in mind, there are many interfaces and usecases in our code that depend on interfaces. In production, we use adapters as concrete implementations for those interfaces, but in tests we need to rely on mocks in order to test the business logic of usecases.
 
 Typical code looks like this:
 ```python
@@ -84,7 +84,7 @@ class CreateNewUserUsecase:
 ```
 
 
-In order to test such code, we need to write the following code:
+To test such code, we need to write the following:
 ```python
 class TestCreateNewUserUsecase(unittest.TestCase):
     def test_create_user(self):
@@ -101,13 +101,13 @@ class TestCreateNewUserUsecase(unittest.TestCase):
         mock_repo.save_user.assert_called_once_with(User(email=email, token=10))
 ```
 
-Note, that we need to:
-- Setup mock before initalizing the `CreateNewUserUsecase` class
-- Setup mocked return value right before actual call
+Note that we need to:
+- Set up the mock before initializing the `CreateNewUserUsecase` class
+- Set up the mocked return value right before the actual call
 - Assert that the method was called with the correct arguments after the execution
 - Assert that the return value is correct
 
-This way, we need to interact with `mock` object multiple times, increasing the complexity of the test and possibly of human error. To simplify this process, the `Mockamorph` library was created.
+This way, we need to interact with the `mock` object multiple times, increasing the complexity of the test and the possibility of human error. To simplify this process, the `Mockamorph` library was created.
 
 The same test could be written using `Mockamorph`:
 ```python
@@ -126,7 +126,7 @@ def test_create_user():
         # Mockamorph automatically verifies all expectations were satisfied
 ```
 
-Additionally, this approach simplifies TDT (table driven tests) by allowing to create mocks before actual test execution.
+Additionally, this approach simplifies TDT (table-driven tests) by allowing you to create mocks before actual test execution.
 
 
 Some toy example:
@@ -277,10 +277,10 @@ mock.verify()  # Passes - no expectations to satisfy
 ### Async Support
 
 ```python
-class RemoveServer(Protocol):
+class RemoteServer(Protocol):
     async def fetch(self, resource: str) -> bytes: ...
 
-async with Mockamorph(RemoveServer) as mock:
+async with Mockamorph(RemoteServer) as mock:
     mock.expect().fetch().awaited_with(resource="resA").returns(b"ok")
     
     source = mock.get_mock()
