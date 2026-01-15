@@ -671,7 +671,7 @@ def test_missing_required_arg() -> None:
             ),
         ):
             #  missing key parameter
-            mock.get_mock().fetch()  # pyright: ignore[reportCallIssue]  # ty:ignore[missing-argument]
+            mock.get_mock().fetch()  # type: ignore[call-arg] # pyright: ignore[reportCallIssue]  # ty:ignore[missing-argument]
 
 
 def test_provided_extra_kwargs() -> None:
@@ -683,7 +683,7 @@ def test_provided_extra_kwargs() -> None:
 
         with pytest.raises(AssertionError, match="unexpected extra=True"):
             # extra argument
-            mock.get_mock().method_a(a="test", b=5, extra=True)  # ty:ignore[unknown-argument]  # pyright: ignore[reportCallIssue]
+            mock.get_mock().method_a(a="test", b=5, extra=True)  # type: ignore[call-arg] # ty:ignore[unknown-argument]  # pyright: ignore[reportCallIssue]
 
 
 def test_verify_with_partial_satisfaction() -> None:
@@ -747,7 +747,7 @@ def test_mock_private_attr_access_rejected() -> None:
 
     ctrl = Mockamorph(Service)
     with pytest.raises(AttributeError):
-        ctrl.get_mock()._something  # pyright: ignore[reportAttributeAccessIssue]  # ty:ignore[unresolved-attribute]
+        ctrl.get_mock()._something  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue]  # ty:ignore[unresolved-attribute]
 
 
 def test_reuse_after_context_exit() -> None:
