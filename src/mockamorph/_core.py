@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import (
@@ -102,7 +103,7 @@ class MockController[T]:
     def __init__(self, target: type[T]) -> None:
         self._target = target
         self._expectations: defaultdict[str, list[Expectation]] = defaultdict(list)
-        self._mock = cast(T, _MockProxyImpl(self))
+        self._mock = cast(T, _MockProxyImpl(target, self))
 
     def register(self, expectation: Expectation) -> None:
         self._expectations[expectation.method_name].append(expectation)
@@ -137,8 +138,9 @@ class MockController[T]:
 
 
 @final
-class _MockProxyImpl:
-    def __init__(self, handler: ExpectationFinder) -> None:
+class _MockProxyImpl[T]:
+    def __init__(self, target: type[T], handler: ExpectationFinder) -> None:
+        self._target = target
         self._handler = handler
 
     def __getattr__(self, name: str) -> Any:
@@ -157,6 +159,8 @@ class _MockProxyImpl:
                 )
                 raise AssertionError(msg)
 
+            self._assert_expectation_args(expectation, name, args, kwargs)
+
             if expectation.exception is not None:
                 if not expectation.awaitable:
                     raise expectation.exception
@@ -173,6 +177,52 @@ class _MockProxyImpl:
             return expectation.return_value
 
         return _mock_method
+
+    def _assert_expectation_args(
+        self,
+        expectation: Expectation,
+        method_name: str,
+        call_args: tuple[Any, ...],
+        call_kwargs: dict[str, Any],
+    ) -> None:
+        want_kwargs = self._convert_args_to_kwargs(method_name, expectation.args)
+        want_kwargs.update(expectation.kwargs)
+
+        got_kwargs = self._convert_args_to_kwargs(method_name, call_args)
+        got_kwargs.update(call_kwargs)
+
+        diffs: list[str] = []
+
+        for key, want_value in want_kwargs.items():
+            if key not in got_kwargs:
+                diffs.append(f"expected {key}={want_value}, but '{key}' is missing")
+                continue
+
+            got_value = got_kwargs[key]
+            if got_value != want_value:
+                diffs.append(f"expected {key}={want_value}, but got {key}={got_value}")
+
+        if diffs:
+            raise AssertionError(
+                f"Unexpected args for '{method_name}':\n{'\n'.join(diffs)}"
+            )
+
+    def _convert_args_to_kwargs(
+        self, method_name: str, args: tuple[Any, ...]
+    ) -> dict[str, Any]:
+        target_method = getattr(self._target, method_name, None)
+        if not target_method:
+            raise AssertionError(
+                f"Method '{method_name}' not found on target type {self._target}"
+            )
+
+        if not args:
+            return {}
+
+        signature = inspect.signature(target_method)
+        param_names = [p for p in signature.parameters if p != "self"]
+
+        return dict(zip(param_names, args))
 
 
 @final
