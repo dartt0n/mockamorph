@@ -184,7 +184,7 @@ class _MockProxyImpl[T]:
         method_name: str,
         call_args: tuple[Any, ...],
         call_kwargs: dict[str, Any],
-    ):
+    ) -> None:
         want_kwargs = self._convert_args_to_kwargs(method_name, expectation.args)
         want_kwargs.update(expectation.kwargs)
 
