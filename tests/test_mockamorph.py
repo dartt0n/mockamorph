@@ -1,4 +1,5 @@
 import asyncio
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -619,12 +620,18 @@ def test_call_wrong_method() -> None:
         def method_a(self) -> str: ...
         def method_b(self) -> str: ...
 
-    with pytest.raises(AssertionError, match="Unexpected call.*method_b"):
-        with Mockamorph(Service) as mock:
-            mock.expect().method_a().called_with().returns("a")
+    mock = Mockamorph(Service)
+    with pytest.raises(AssertionError, match="Unexpected call to 'method_b'"):
+        mock.expect().method_a().called_with().returns("a")
 
-            m = mock.get_mock()
-            m.method_b()  # Wrong method
+        m = mock.get_mock()
+        m.method_b()  # Wrong method
+
+    with pytest.raises(
+        AssertionError,
+        match=re.escape("Unsatisfied expectations:\nmissing 1 call(s) to 'method_a'"),
+    ):
+        mock.verify()
 
 
 def test_wrong_positional_arg_value() -> None:
@@ -671,6 +678,18 @@ def test_extra_unexpected_kwargs() -> None:
             mock.get_mock().configure(host="remote", port=9090)
 
 
+def test_provided_extra_kwargs() -> None:
+    class SomeInterface(Protocol):
+        def method_a(self, a: str, b: int) -> None: ...
+
+    with pytest.raises(AssertionError, match="unexpected extra=True"):
+        with Mockamorph(SomeInterface) as mock:
+            mock.expect().method_a().called_with(a="test", b=5).returns(None)
+
+            # extra argument
+            mock.get_mock().method_a(a="test", b=5, extra=True)  # ty:ignore[unknown-argument]  # pyright: ignore[reportCallIssue]
+
+
 def test_verify_with_partial_satisfaction() -> None:
     class Service(Protocol):
         def step1(self) -> None: ...
@@ -687,7 +706,10 @@ def test_verify_with_partial_satisfaction() -> None:
     m.step2()
     # step3 not called
 
-    with pytest.raises(AssertionError, match="step3.*unsatisfied"):
+    with pytest.raises(
+        AssertionError,
+        match=re.escape("Unsatisfied expectations:\nmissing 1 call(s) to 'step3"),
+    ):
         ctrl.verify()
 
 
@@ -716,7 +738,10 @@ def test_verify_counts_remaining_expectations() -> None:
 
     ctrl.get_mock().method()  # Only consume 1 of 5
 
-    with pytest.raises(AssertionError, match="4 unsatisfied"):
+    with pytest.raises(
+        AssertionError,
+        match=re.escape("Unsatisfied expectations:\nmissing 4 call(s) to 'method'"),
+    ):
         ctrl.verify()
 
 
