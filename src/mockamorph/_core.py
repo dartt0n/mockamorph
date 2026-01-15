@@ -1,30 +1,34 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
+    Never,
     Protocol,
     cast,
     final,
-    override,
 )
 
 
 @dataclass(frozen=False, kw_only=True, slots=True)
 class Expectation:
     method_name: str
-    args: tuple[Any, ...]
-    kwargs: dict[str, Any]
-    return_value: Any
-    exception: BaseException | None
+    awaitable: bool = False
+    args: tuple[Any, ...] = field(default_factory=tuple)
+    kwargs: dict[str, Any] = field(default_factory=dict)
+    return_value: Any = None
+    exception: BaseException | None = AssertionError(
+        "Expectation was not properly initialized"
+    )
 
 
 class Registrar(Protocol):
     def register(self, expectation: Expectation) -> None: ...
 
 
-class MockCallHandler(Protocol):
+class ExpectationFinder(Protocol):
     def find_expectation(self, method_name: str) -> Expectation | None: ...
 
 
@@ -37,16 +41,18 @@ class ReturnSetter:
     def returns(self, *values: Any) -> None:
         self._expectation.return_value = values[0] if len(values) == 1 else values
         self._expectation.exception = None
+
         self._registrar.register(self._expectation)
 
     def raises(self, exception: BaseException) -> None:
-        self._expectation.exception = exception
         self._expectation.return_value = None
+        self._expectation.exception = exception
+
         self._registrar.register(self._expectation)
 
 
 @final
-class CallMatcher:
+class CallArgsSetter:
     def __init__(self, expectation: Expectation, registrar: Registrar) -> None:
         self._expectation = expectation
         self._registrar = registrar
@@ -54,6 +60,13 @@ class CallMatcher:
     def called_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
+        self._expectation.awaitable = False
+        return ReturnSetter(self._expectation, self._registrar)
+
+    def awaited_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+        self._expectation.args = args
+        self._expectation.kwargs = kwargs
+        self._expectation.awaitable = True
         return ReturnSetter(self._expectation, self._registrar)
 
 
@@ -63,15 +76,10 @@ class MethodProxy:
         self._method_name = method_name
         self._registrar = registrar
 
-    def __call__(self) -> CallMatcher:
-        expectation = Expectation(
-            method_name=self._method_name,
-            args=(),
-            kwargs={},
-            return_value=None,
-            exception=RuntimeError("Mockamorph is unfinished"),
+    def __call__(self) -> CallArgsSetter:
+        return CallArgsSetter(
+            Expectation(method_name=self._method_name), self._registrar
         )
-        return CallMatcher(expectation, self._registrar)
 
 
 @final
@@ -95,9 +103,6 @@ class MockController[T]:
         self._target = target
         self._expectations: defaultdict[str, list[Expectation]] = defaultdict(list)
         self._mock = cast(T, _MockProxyImpl(self))
-
-    def expect(self) -> ExpectationBuilder:
-        return ExpectationBuilder(self)
 
     def register(self, expectation: Expectation) -> None:
         self._expectations[expectation.method_name].append(expectation)
@@ -133,7 +138,7 @@ class MockController[T]:
 
 @final
 class _MockProxyImpl:
-    def __init__(self, handler: MockCallHandler) -> None:
+    def __init__(self, handler: ExpectationFinder) -> None:
         self._handler = handler
 
     def __getattr__(self, name: str) -> Any:
@@ -143,7 +148,6 @@ class _MockProxyImpl:
             )
 
         def _mock_method(*args: Any, **kwargs: Any) -> Any:
-            """Execute the mock method call."""
             expectation = self._handler.find_expectation(name)
 
             if expectation is None:
@@ -154,23 +158,21 @@ class _MockProxyImpl:
                 raise AssertionError(msg)
 
             if expectation.exception is not None:
-                raise expectation.exception
+                if not expectation.awaitable:
+                    raise expectation.exception
+
+                failed_future: asyncio.Future[Never] = asyncio.Future()
+                failed_future.set_exception(expectation.exception)
+                return failed_future
+
+            if expectation.awaitable:
+                succeeded_future: asyncio.Future[Any] = asyncio.Future()
+                succeeded_future.set_result(expectation.return_value)
+                return succeeded_future
 
             return expectation.return_value
 
         return _mock_method
-
-    @override
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name == "_handler":
-            object.__setattr__(self, name, value)
-        else:
-            msg = (
-                f"Cannot set attribute '{name}' on mock. "
-                f"Use controller.expect().{name}().called_with(...).returns(...) "
-                f"instead."
-            )
-            raise AttributeError(msg)
 
 
 @final
@@ -182,10 +184,7 @@ class Mockamorph[T]:
         return self._ctrl.mock
 
     def expect(self) -> ExpectationBuilder:
-        return ExpectationBuilder(self)
-
-    def register(self, expectation: Expectation) -> None:
-        self._ctrl.register(expectation)
+        return ExpectationBuilder(self._ctrl)
 
     def verify(self) -> None:
         self._ctrl.verify()
@@ -197,6 +196,18 @@ class Mockamorph[T]:
         return self
 
     def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        _ = exc_type, exc_val, exc_tb
+        self.verify()
+
+    async def __aenter__(self) -> Mockamorph[T]:
+        return self
+
+    async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
