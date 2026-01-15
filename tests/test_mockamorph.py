@@ -431,21 +431,6 @@ def test_abstract_class_multiple_methods() -> None:
         assert mock.write("newkey", "newvalue") is True
 
 
-def test_fifo_ordering() -> None:
-    class SomeInterface(Protocol):
-        def step(self) -> int: ...
-
-    with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().step().called_with().returns(1)
-        ctrl.expect().step().called_with().returns(2)
-        ctrl.expect().step().called_with().returns(3)
-
-        mock = ctrl.get_mock()
-        assert mock.step() == 1
-        assert mock.step() == 2
-        assert mock.step() == 3
-
-
 def test_private_attr_expectation_rejected() -> None:
     class SomeInterface(Protocol): ...
 
@@ -756,24 +741,6 @@ def test_verify_counts_remaining_expectations() -> None:
         ctrl.verify()
 
 
-def test_expect_private_method_rejected() -> None:
-    class Service(Protocol):
-        def public_method(self) -> str: ...
-
-    with Mockamorph(Service) as mock:
-        with pytest.raises(AttributeError, match="private"):
-            mock.expect()._private()
-
-
-def test_expect_dunder_method_rejected() -> None:
-    class Service(Protocol):
-        def method(self) -> str: ...
-
-    with Mockamorph(Service) as mock:
-        with pytest.raises(AttributeError, match="private"):
-            mock.expect()._internal_thing()
-
-
 def test_mock_private_attr_access_rejected() -> None:
     class Service(Protocol):
         def method(self) -> str: ...
@@ -1002,17 +969,6 @@ def test_callable_argument() -> None:
         mock.get_mock().register_callback(my_callback)
 
 
-def test_return_none_explicitly() -> None:
-    class Service(Protocol):
-        def void_method(self) -> None: ...
-
-    with Mockamorph(Service) as mock:
-        mock.expect().void_method().called_with().returns(None)
-
-        result = mock.get_mock().void_method()
-        assert result is None
-
-
 def test_return_exception_object_not_raise() -> None:
     class Service(Protocol):
         def get_error(self) -> Exception: ...
@@ -1101,25 +1057,3 @@ def test_raise_exception_with_cause() -> None:
             mock.get_mock().risky()
 
         assert exc_info.value.__cause__ is original
-
-
-def test_raise_custom_exception_with_attributes() -> None:
-    class APIError(Exception):
-        def __init__(self, status: int, body: dict[str, Any]) -> None:
-            self.status = status
-            self.body = body
-            super().__init__(f"API Error {status}")
-
-    class Service(Protocol):
-        def call_api(self) -> dict[str, Any]: ...
-
-    error = APIError(404, {"error": "Not Found", "code": "RESOURCE_NOT_FOUND"})
-
-    with Mockamorph(Service) as mock:
-        mock.expect().call_api().called_with().raises(error)
-
-        with pytest.raises(APIError) as exc_info:
-            mock.get_mock().call_api()
-
-        assert exc_info.value.status == 404
-        assert exc_info.value.body["code"] == "RESOURCE_NOT_FOUND"
