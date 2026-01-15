@@ -274,6 +274,19 @@ mock.reset()  # Clear all expectations
 mock.verify()  # Passes - no expectations to satisfy
 ```
 
+### Async Support
+
+```python
+class RemoveServer(Protocol):
+    async def fetch(self, resource: str) -> bytes: ...
+
+async with Mockamorph(RemoveServer) as mock:
+    mock.expect().fetch().awaited_with(resource="resA").returns(b"ok")
+    
+    source = mock.get_mock()
+    assert await source.fetch() == b"ok"
+```
+
 ## Development
 
 ### Setup
