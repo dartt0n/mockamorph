@@ -1,5 +1,7 @@
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import pytest
@@ -586,3 +588,607 @@ async def test_async_method_raises() -> None:
 
         with pytest.raises(RuntimeError, match="Failed"):
             await mock.async_method()
+
+
+def test_call_method_with_no_expectations() -> None:
+    class Service(Protocol):
+        def process(self) -> str: ...
+
+    with pytest.raises(AssertionError, match="Unexpected call"):
+        with Mockamorph(Service) as mock:
+            mock.get_mock().process()
+
+
+def test_call_method_more_times_than_expected() -> None:
+    class Service(Protocol):
+        def get_value(self) -> int: ...
+
+    with pytest.raises(AssertionError, match="Unexpected call"):
+        with Mockamorph(Service) as mock:
+            mock.expect().get_value().called_with().returns(1)
+            mock.expect().get_value().called_with().returns(2)
+
+            m = mock.get_mock()
+            assert m.get_value() == 1
+            assert m.get_value() == 2
+            m.get_value()  # Third call - should fail
+
+
+def test_call_wrong_method() -> None:
+    class Service(Protocol):
+        def method_a(self) -> str: ...
+        def method_b(self) -> str: ...
+
+    with pytest.raises(AssertionError, match="Unexpected call.*method_b"):
+        with Mockamorph(Service) as mock:
+            mock.expect().method_a().called_with().returns("a")
+
+            m = mock.get_mock()
+            m.method_b()  # Wrong method
+
+
+def test_wrong_positional_arg_value() -> None:
+    class Calculator(Protocol):
+        def add(self, a: int, b: int) -> int: ...
+
+    with pytest.raises(AssertionError, match="Unexpected args"):
+        with Mockamorph(Calculator) as mock:
+            mock.expect().add().called_with(1, 2).returns(3)
+            mock.get_mock().add(1, 999)  # Wrong second arg
+
+
+def test_wrong_keyword_arg_value() -> None:
+    class Config(Protocol):
+        def set_option(self, *, name: str, value: int) -> None: ...
+
+    with pytest.raises(AssertionError, match="Unexpected args"):
+        with Mockamorph(Config) as mock:
+            mock.expect().set_option().called_with(name="debug", value=1).returns(None)
+            mock.get_mock().set_option(name="debug", value=0)
+
+
+def test_missing_required_arg() -> None:
+    class Service(Protocol):
+        def fetch(self, key: str) -> str: ...
+
+    with pytest.raises(AssertionError, match="missing"):
+        with Mockamorph(Service) as mock:
+            mock.expect().fetch().called_with("mykey").returns("value")
+            #  missing key parameter
+            mock.get_mock().fetch()  # pyright: ignore[reportCallIssue]  # ty:ignore[missing-argument]
+
+
+def test_extra_unexpected_kwargs() -> None:
+    class Service(Protocol):
+        def configure(self, host: str, port: int) -> None: ...
+
+    # Expect specific args, call with different values
+    with pytest.raises(AssertionError, match="Unexpected args"):
+        with Mockamorph(Service) as mock:
+            mock.expect().configure().called_with(host="localhost", port=8080).returns(
+                None
+            )
+            mock.get_mock().configure(host="remote", port=9090)
+
+
+def test_verify_with_partial_satisfaction() -> None:
+    class Service(Protocol):
+        def step1(self) -> None: ...
+        def step2(self) -> None: ...
+        def step3(self) -> None: ...
+
+    ctrl = Mockamorph(Service)
+    ctrl.expect().step1().called_with().returns(None)
+    ctrl.expect().step2().called_with().returns(None)
+    ctrl.expect().step3().called_with().returns(None)
+
+    m = ctrl.get_mock()
+    m.step1()
+    m.step2()
+    # step3 not called
+
+    with pytest.raises(AssertionError, match="step3.*unsatisfied"):
+        ctrl.verify()
+
+
+def test_verify_called_multiple_times() -> None:
+    class Service(Protocol):
+        def action(self) -> str: ...
+
+    ctrl = Mockamorph(Service)
+    ctrl.expect().action().called_with().returns("done")
+
+    ctrl.get_mock().action()
+
+    # Multiple verify calls should all pass
+    ctrl.verify()
+    ctrl.verify()
+    ctrl.verify()
+
+
+def test_verify_counts_remaining_expectations() -> None:
+    class Service(Protocol):
+        def method(self) -> int: ...
+
+    ctrl = Mockamorph(Service)
+    for i in range(5):
+        ctrl.expect().method().called_with().returns(i)
+
+    ctrl.get_mock().method()  # Only consume 1 of 5
+
+    with pytest.raises(AssertionError, match="4 unsatisfied"):
+        ctrl.verify()
+
+
+def test_expect_private_method_rejected() -> None:
+    """Cannot set expectation on private methods."""
+
+    class Service(Protocol):
+        def public_method(self) -> str: ...
+
+    with Mockamorph(Service) as mock:
+        with pytest.raises(AttributeError, match="private"):
+            mock.expect()._private()
+
+
+def test_expect_dunder_method_rejected() -> None:
+    """Cannot set expectation starting with underscore."""
+
+    class Service(Protocol):
+        def method(self) -> str: ...
+
+    with Mockamorph(Service) as mock:
+        with pytest.raises(AttributeError, match="private"):
+            mock.expect()._internal_thing()
+
+
+def test_mock_private_attr_access_rejected() -> None:
+    """Accessing private attr on mock raises AttributeError."""
+
+    class Service(Protocol):
+        def method(self) -> str: ...
+
+    ctrl = Mockamorph(Service)
+    with pytest.raises(AttributeError):
+        ctrl.get_mock()._something  # pyright: ignore[reportAttributeAccessIssue]  # ty:ignore[unresolved-attribute]
+
+
+"""Tests for context manager behavior."""
+
+
+def test_context_manager_verifies_on_normal_exit() -> None:
+    """Context manager calls verify on normal exit."""
+
+    class Service(Protocol):
+        def action(self) -> str: ...
+
+    with pytest.raises(AssertionError, match="Unsatisfied"):
+        with Mockamorph(Service) as mock:
+            mock.expect().action().called_with().returns("done")
+            # Exit without calling action
+
+
+def test_context_manager_with_exception_in_block() -> None:
+    """If exception occurs in block, verify still runs (may mask original)."""
+
+    class Service(Protocol):
+        def action(self) -> str: ...
+
+    # Note: The verify() runs in __exit__ regardless
+    # If both raise, behavior depends on implementation
+    with pytest.raises(AssertionError, match="Unsatisfied"):
+        with Mockamorph(Service) as mock:
+            mock.expect().action().called_with().returns("done")
+            # Don't call action, then exit
+            # Verify should still fail
+
+
+def test_reuse_after_context_exit() -> None:
+    """Can the mock be reused after context exit? (Currently yes)"""
+
+    class Service(Protocol):
+        def get(self) -> int: ...
+
+    ctrl = Mockamorph(Service)
+
+    with ctrl:
+        ctrl.expect().get().called_with().returns(1)
+        assert ctrl.get_mock().get() == 1
+
+    # After exit, set new expectations
+    ctrl.expect().get().called_with().returns(2)
+    assert ctrl.get_mock().get() == 2
+    ctrl.verify()
+
+
+"""Tests for async method edge cases."""
+
+
+@pytest.mark.asyncio
+async def test_async_method_not_awaited_returns_future() -> None:
+    """Calling async method without await returns a Future."""
+
+    class AsyncService(Protocol):
+        async def fetch(self) -> str: ...
+
+    async with Mockamorph(AsyncService) as mock:
+        mock.expect().fetch().awaited_with().returns("data")
+
+        result = mock.get_mock().fetch()
+        assert asyncio.isfuture(result) or asyncio.iscoroutine(result)
+        # Clean up by awaiting
+        assert await result == "data"
+
+
+@pytest.mark.asyncio
+async def test_async_multiple_awaits_fifo() -> None:
+    """Multiple async expectations consumed FIFO."""
+
+    class AsyncService(Protocol):
+        async def fetch(self) -> int: ...
+
+    async with Mockamorph(AsyncService) as mock:
+        mock.expect().fetch().awaited_with().returns(1)
+        mock.expect().fetch().awaited_with().returns(2)
+        mock.expect().fetch().awaited_with().returns(3)
+
+        m = mock.get_mock()
+        assert await m.fetch() == 1
+        assert await m.fetch() == 2
+        assert await m.fetch() == 3
+
+
+@pytest.mark.asyncio
+async def test_async_raises_and_returns_interleaved() -> None:
+    """Async can interleave raises and returns."""
+
+    class AsyncService(Protocol):
+        async def call_api(self) -> str: ...
+
+    async with Mockamorph(AsyncService) as mock:
+        mock.expect().call_api().awaited_with().raises(ConnectionError("timeout"))
+        mock.expect().call_api().awaited_with().returns("success")
+        mock.expect().call_api().awaited_with().raises(ConnectionError("again"))
+
+        m = mock.get_mock()
+
+        with pytest.raises(ConnectionError):
+            await m.call_api()
+
+        assert await m.call_api() == "success"
+
+        with pytest.raises(ConnectionError):
+            await m.call_api()
+
+
+@pytest.mark.asyncio
+async def test_sync_expectation_for_async_method_works() -> None:
+    """Using called_with for async method still works (returns immediately)."""
+
+    class AsyncService(Protocol):
+        async def fetch(self) -> str: ...
+
+    # Using called_with instead of awaited_with
+    async with Mockamorph(AsyncService) as mock:
+        mock.expect().fetch().called_with().returns("sync-style")
+
+        # This returns the value directly, not a future
+        m = mock.get_mock()
+        result = m.fetch()
+        # Result is the actual value, not awaitable
+        assert result == "sync-style"
+
+
+"""Tests for calling methods not defined on the interface."""
+
+
+def test_call_nonexistent_method() -> None:
+    """Calling a method that doesn't exist on Protocol."""
+
+    class Service(Protocol):
+        def existing_method(self) -> str: ...
+
+    with pytest.raises(AssertionError, match="Unexpected call"):
+        with Mockamorph(Service) as mock:
+            # No expectation set, so it fails
+            mock.get_mock().nonexistent_method()  # type: ignore[attr-defined]
+
+
+def test_expect_nonexistent_method_then_call() -> None:
+    """Setting expectation on non-existent method - does it work?"""
+
+    class Service(Protocol):
+        def real_method(self) -> str: ...
+
+    # This should work - mockamorph doesn't validate method names against interface
+    with Mockamorph(Service) as mock:
+        mock.expect().fake_method().called_with().returns("faked")
+        # This will fail during the call because args validation
+        # tries to introspect the target type
+        with pytest.raises(AssertionError):
+            mock.get_mock().fake_method()  # type: ignore[attr-defined]
+
+
+"""Tests for empty interfaces."""
+
+
+def test_empty_protocol() -> None:
+    """Mocking an empty Protocol."""
+
+    class EmptyService(Protocol):
+        pass
+
+    with Mockamorph(EmptyService) as mock:
+        # Should work, just no methods to call
+        _ = mock.get_mock()
+        # Verify passes immediately
+
+
+def test_empty_abc() -> None:
+    """Mocking an empty ABC."""
+
+    class EmptyAbstract(ABC):
+        pass
+
+    with Mockamorph(EmptyAbstract) as mock:
+        _ = mock.get_mock()
+
+
+"""Tests for get_mock() behavior."""
+
+
+def test_get_mock_returns_same_instance() -> None:
+    """Multiple get_mock() calls return the same mock object."""
+
+    class Service(Protocol):
+        def method(self) -> str: ...
+
+    ctrl = Mockamorph(Service)
+    mock1 = ctrl.get_mock()
+    mock2 = ctrl.get_mock()
+
+    assert mock1 is mock2
+
+
+def test_expectations_set_after_get_mock() -> None:
+    """Expectations can be set after get_mock() is called."""
+
+    class Service(Protocol):
+        def method(self) -> int: ...
+
+    ctrl = Mockamorph(Service)
+    mock = ctrl.get_mock()
+
+    # Set expectation after getting mock
+    ctrl.expect().method().called_with().returns(42)
+
+    assert mock.method() == 42
+    ctrl.verify()
+
+
+"""Tests for complex argument types."""
+
+
+def test_none_as_argument() -> None:
+    """Passing None as an argument value."""
+
+    class Service(Protocol):
+        def process(self, value: str | None) -> str: ...
+
+    with Mockamorph(Service) as mock:
+        mock.expect().process().called_with(None).returns("null")
+
+        assert mock.get_mock().process(None) == "null"
+
+
+def test_nested_dict_argument() -> None:
+    """Passing nested dictionaries as arguments."""
+
+    class Service(Protocol):
+        def configure(self, config: dict[str, Any]) -> bool: ...
+
+    config = {
+        "database": {
+            "host": "localhost",
+            "port": 5432,
+            "credentials": {"user": "admin", "password": "secret"},
+        },
+        "cache": {"enabled": True, "ttl": 300},
+    }
+
+    with Mockamorph(Service) as mock:
+        mock.expect().configure().called_with(config).returns(True)
+
+        assert mock.get_mock().configure(config) is True
+
+
+def test_list_argument() -> None:
+    """Passing lists as arguments."""
+
+    class Service(Protocol):
+        def batch_process(self, items: list[int]) -> int: ...
+
+    with Mockamorph(Service) as mock:
+        mock.expect().batch_process().called_with([1, 2, 3, 4, 5]).returns(15)
+
+        assert mock.get_mock().batch_process([1, 2, 3, 4, 5]) == 15
+
+
+def test_dataclass_argument() -> None:
+    """Passing dataclass instances as arguments."""
+
+    @dataclass
+    class Request:
+        id: int
+        payload: str
+        metadata: dict[str, str] = field(default_factory=dict)
+
+    class Service(Protocol):
+        def handle(self, request: Request) -> str: ...
+
+    req = Request(id=1, payload="data", metadata={"trace": "abc123"})
+
+    with Mockamorph(Service) as mock:
+        mock.expect().handle().called_with(req).returns("ok")
+
+        assert mock.get_mock().handle(req) == "ok"
+
+
+def test_callable_argument() -> None:
+    """Passing callable as argument."""
+
+    class Service(Protocol):
+        def register_callback(self, callback: Any) -> None: ...
+
+    def my_callback() -> None:
+        pass
+
+    with Mockamorph(Service) as mock:
+        mock.expect().register_callback().called_with(my_callback).returns(None)
+
+        mock.get_mock().register_callback(my_callback)
+
+
+"""Tests for various return value types."""
+
+
+def test_return_none_explicitly() -> None:
+    """Explicitly returning None."""
+
+    class Service(Protocol):
+        def void_method(self) -> None: ...
+
+    with Mockamorph(Service) as mock:
+        mock.expect().void_method().called_with().returns(None)
+
+        result = mock.get_mock().void_method()
+        assert result is None
+
+
+def test_return_exception_object_not_raise() -> None:
+    """Returning an exception object (not raising it)."""
+
+    class Service(Protocol):
+        def get_error(self) -> Exception: ...
+
+    error = ValueError("this is returned, not raised")
+
+    with Mockamorph(Service) as mock:
+        mock.expect().get_error().called_with().returns(error)
+
+        result = mock.get_mock().get_error()
+        assert result is error
+        assert isinstance(result, ValueError)
+
+
+def test_return_mock_object() -> None:
+    """Returning another mock from a mock method."""
+
+    class InnerService(Protocol):
+        def inner_method(self) -> str: ...
+
+    class OuterService(Protocol):
+        def get_inner(self) -> InnerService: ...
+
+    with Mockamorph(InnerService) as inner_mock:
+        inner_mock.expect().inner_method().called_with().returns("inner result")
+
+        with Mockamorph(OuterService) as outer_mock:
+            outer_mock.expect().get_inner().called_with().returns(inner_mock.get_mock())
+
+            outer = outer_mock.get_mock()
+            inner = outer.get_inner()
+            assert inner.inner_method() == "inner result"
+
+
+def test_return_generator_function() -> None:
+    """Returning a generator function."""
+
+    class Service(Protocol):
+        def get_generator(self) -> Any: ...
+
+    def my_gen() -> Any:
+        yield 1
+        yield 2
+        yield 3
+
+    with Mockamorph(Service) as mock:
+        mock.expect().get_generator().called_with().returns(my_gen)
+
+        result = mock.get_mock().get_generator()
+        assert list(result()) == [1, 2, 3]
+
+
+def test_return_tuple_single_element() -> None:
+    """Returning single-element tuple vs single value."""
+
+    class Service(Protocol):
+        def get_single(self) -> tuple[int]: ...
+        def get_value(self) -> int: ...
+
+    with Mockamorph(Service) as mock:
+        # For single value in tuple, returns() unpacks to single value
+        mock.expect().get_single().called_with().returns((42,))  # Pass tuple
+        mock.expect().get_value().called_with().returns(42)
+
+        assert mock.get_mock().get_single() == (42,)
+        assert mock.get_mock().get_value() == 42
+
+
+"""Tests for exception raising behavior."""
+
+
+def test_raise_base_exception() -> None:
+    """Raising BaseException subclass."""
+
+    class Service(Protocol):
+        def critical(self) -> None: ...
+
+    with Mockamorph(Service) as mock:
+        mock.expect().critical().called_with().raises(SystemExit(1))
+
+        with pytest.raises(SystemExit):
+            mock.get_mock().critical()
+
+
+def test_raise_exception_with_cause() -> None:
+    """Raising exception with __cause__ set."""
+
+    class Service(Protocol):
+        def risky(self) -> None: ...
+
+    original = ValueError("original error")
+    chained = RuntimeError("wrapper error")
+    chained.__cause__ = original
+
+    with Mockamorph(Service) as mock:
+        mock.expect().risky().called_with().raises(chained)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            mock.get_mock().risky()
+
+        assert exc_info.value.__cause__ is original
+
+
+def test_raise_custom_exception_with_attributes() -> None:
+    """Raising custom exception with extra attributes."""
+
+    class APIError(Exception):
+        def __init__(self, status: int, body: dict[str, Any]) -> None:
+            self.status = status
+            self.body = body
+            super().__init__(f"API Error {status}")
+
+    class Service(Protocol):
+        def call_api(self) -> dict[str, Any]: ...
+
+    error = APIError(404, {"error": "Not Found", "code": "RESOURCE_NOT_FOUND"})
+
+    with Mockamorph(Service) as mock:
+        mock.expect().call_api().called_with().raises(error)
+
+        with pytest.raises(APIError) as exc_info:
+            mock.get_mock().call_api()
+
+        assert exc_info.value.status == 404
+        assert exc_info.value.body["code"] == "RESOURCE_NOT_FOUND"
