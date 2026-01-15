@@ -502,3 +502,30 @@ def test_mockamorph_as_fixture_failure(
     # because no call happened
     with pytest.raises(AssertionError, match="Unsatisfied expectations"):
         mockamorph_fixture.verify()
+
+
+@pytest.mark.asyncio
+async def test_async_method() -> None:
+    class AsyncInterface(Protocol):
+        async def async_method(self) -> str: ...
+
+    async with Mockamorph(AsyncInterface) as ctrl:
+        ctrl.expect().async_method().awaited_with().returns("Hello world")
+
+        mock = ctrl.get_mock()
+
+        assert await mock.async_method() == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_async_method_raises() -> None:
+    class AsyncInterface(Protocol):
+        async def async_method(self) -> str: ...
+
+    async with Mockamorph(AsyncInterface) as ctrl:
+        ctrl.expect().async_method().awaited_with().raises(RuntimeError("Failed"))
+
+        mock = ctrl.get_mock()
+
+        with pytest.raises(RuntimeError, match="Failed"):
+            await mock.async_method()
