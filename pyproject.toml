@@ -1,0 +1,71 @@
+[project]
+name = "mockamorph"
+dynamic = ["version"]
+description = "Lightweight interface mocking library for Python for expectation-driven testing"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "Anton Kudryavtsev" },
+]
+keywords = ["mock", "mocking", "testing", "unittest", "pytest"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Testing :: Mocking",
+]
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.37.1",
+    "hatch>=1.14.0",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/dartt0n/mockamorph"
+Documentation = "https://github.com/dartt0n/mockamorph#readme"
+Repository = "https://github.com/dartt0n/mockamorph"
+Issues = "https://github.com/dartt0n/mockamorph/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/mockamorph/__version__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src"]
+exclude = ["/tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mockamorph"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+mypy_path = "src"
+
+[tool.basedpyright]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+reportUnknownMemberType = false
