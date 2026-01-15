@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import (
     Any,
+    Never,
     Protocol,
     cast,
     final,
@@ -160,16 +161,16 @@ class _MockProxyImpl:
                 if not expectation.awaitable:
                     raise expectation.exception
 
-                future = asyncio.Future()
-                future.set_exception(expectation.exception)
-                return future
+                failed_future: asyncio.Future[Never] = asyncio.Future()
+                failed_future.set_exception(expectation.exception)
+                return failed_future
 
-            if not expectation.awaitable:
-                return expectation.return_value
+            if expectation.awaitable:
+                succeeded_future: asyncio.Future[Any] = asyncio.Future()
+                succeeded_future.set_result(expectation.return_value)
+                return succeeded_future
 
-            future = asyncio.Future()
-            future.set_result(expectation.return_value)
-            return future
+            return expectation.return_value
 
         return _mock_method
 
