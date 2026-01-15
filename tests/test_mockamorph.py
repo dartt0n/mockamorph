@@ -199,6 +199,63 @@ def test_args_kwargs_matching() -> None:
             SomeUsecase(ctrl.get_mock()).use(a=10, b="test3")
 
 
+def test_incorrect_args() -> None:
+    class SomeInterface(Protocol):
+        def method_a(self, x: int, y: str) -> str: ...
+
+    with Mockamorph(SomeInterface) as ctrl:
+        # expected with non-keyword args
+        ctrl.expect().method_a().called_with(1, "test1").returns("one")
+
+        with pytest.raises(AssertionError, match="Unexpected args"):
+            # call with keyword args with wrong values
+            ctrl.get_mock().method_a(x=2, y="not-test")
+
+
+def test_method_with_nonmatching_args_no_sideeffect() -> None:
+    class SomeInterface(Protocol):
+        def method_a(self, x: int, y: str) -> str: ...
+
+    with Mockamorph(SomeInterface) as ctrl:
+        ctrl.expect().method_a().called_with(x=1, y="test1").raises(RuntimeError("!!!"))
+
+        mock = ctrl.get_mock()
+        with pytest.raises(AssertionError, match="Unexpected args"):
+            mock.method_a(2, y="test2")
+
+
+def test_slash_in_argument_list() -> None:
+    class SomeInterface(Protocol):
+        def method_a(self, x: int, /, y: str) -> str: ...
+
+    with Mockamorph(SomeInterface) as ctrl:
+        # note: this does not follow original signature
+        ctrl.expect().method_a().called_with(x=1, y="test1").returns("one")
+        ctrl.expect().method_a().called_with(x=3, y="test3").returns("one")
+
+        mock = ctrl.get_mock()
+        with pytest.raises(AssertionError, match="Unexpected args"):
+            mock.method_a(2, y="test2")
+
+        assert mock.method_a(3, y="test3") == "one"
+
+
+def test_star_in_argument_list() -> None:
+    class SomeInterface(Protocol):
+        def method_a(self, x: int, *, y: str) -> str: ...
+
+    with Mockamorph(SomeInterface) as ctrl:
+        # note: this does not follow original signature
+        ctrl.expect().method_a().called_with(1, "test1").returns("one")
+        ctrl.expect().method_a().called_with(3, "test3").returns("one")
+
+        mock = ctrl.get_mock()
+        with pytest.raises(AssertionError, match="Unexpected args"):
+            mock.method_a(x=2, y="test2")
+
+        assert mock.method_a(x=3, y="test3") == "one"
+
+
 def test_multiple_methods_on_mock() -> None:
     class SomeInterface(Protocol):
         def method_a(self, x: int) -> str: ...
