@@ -266,3 +266,23 @@ async def test_async_support() -> None:
 
         source = mock.get_mock()
         assert await source.fetch(resource="resA") == b"ok"
+
+
+def test_mocking_custom_class():
+    class Translator:
+        def get_hello(self) -> str:
+            return "Hello"
+
+    class GreeterUsecase:
+        def __init__(self, dep: Translator):
+            self._dep = dep
+
+        def greet(self, name: str) -> str:
+            return f"{self._dep.get_hello()} {name}!"
+
+    assert GreeterUsecase(Translator()).greet("world") == "Hello world!"
+
+    with Mockamorph(Translator) as ctrl:
+        ctrl.expect().get_hello().called_with().returns("Привет")
+
+        assert GreeterUsecase(ctrl.get_mock()).greet("мир") == "Привет мир!"
