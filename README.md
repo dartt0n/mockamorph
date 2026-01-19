@@ -17,13 +17,13 @@ from typing import Protocol
 from mockamorph import Mockamorph
 
 
-# 1. Define an interface (Protocol or ABC)
+# 1. Define a class to be mocked
 class UserRepository(Protocol):
     def get_user(self, user_id: int) -> str: ...
     def save_user(self, name: str) -> bool: ...
 
 
-# 2. Your code that depends on the interface
+# 2. Your code that depends on the interface (the code to be tested)
 class UserService:
     def __init__(self, repo: UserRepository):
         self.repo = repo
@@ -210,6 +210,29 @@ with Mockamorph(Calculator) as mock:
     
     calc = mock.get_mock()
     assert calc.add(2, 3) == 5
+```
+
+Mocking custom class is also supported:
+```python
+class Translator:
+    def get_hello(self) -> str:
+        return "Hello"
+
+class GreeterUsecase:
+    def __init__(self, dep: Translator):
+        self._dep = dep
+
+    def greet(self, name: str) -> str:
+        return f"{self._dep.get_hello()} {name}!"
+
+# test with a real implementation
+assert GreeterUsecase(Translator()).greet("world") == "Hello world!"
+
+# test with a mock
+with Mockamorph(Translator) as ctrl:
+    ctrl.expect().get_hello().called_with().returns("Привет")
+
+    assert GreeterUsecase(ctrl.get_mock()).greet("мир") == "Привет мир!"
 ```
 
 ### Multiple Return Values (FIFO)
