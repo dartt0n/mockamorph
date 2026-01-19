@@ -268,7 +268,7 @@ async def test_async_support() -> None:
         assert await source.fetch(resource="resA") == b"ok"
 
 
-def test_mocking_custom_class():
+def test_mocking_custom_class() -> None:
     class Translator:
         def get_hello(self) -> str:
             return "Hello"
