@@ -23,7 +23,7 @@ def test_mock_protocol_returns_value() -> None:
             return self.__impl.do_stuff() * 5
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with().returns(5)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns(5)
         usecase = SomeUsecase(ctrl.get_mock())
 
         assert usecase.business_logic() == 25
@@ -42,7 +42,7 @@ def test_mock_abstract_class_returns_value() -> None:
             return self.__impl.do_stuff() * 5
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with().returns(5)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns(5)
 
         usecase = SomeUsecase(ctrl.get_mock())
         assert usecase.business_logic() == 25
@@ -65,7 +65,7 @@ def test_returns_tuple_unpacking() -> None:
             return ""
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with().returns(2, "Y", True)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns((2, "Y", True))
         usecase = SomeUsecase(ctrl.get_mock())
 
         assert usecase.business_logic() == "YY"
@@ -83,9 +83,9 @@ def test_sequential_calls_return_fifo() -> None:
             return self.__impl.do_stuff() + 1
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with().returns(1)
-        ctrl.expect().do_stuff().called_with().returns(2)
-        ctrl.expect().do_stuff().called_with().returns(3)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns(1)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns(2)
+        ctrl.expect(SomeInterface.do_stuff).called_with().returns(3)
 
         usecase = SomeUsecase(ctrl.get_mock())
 
@@ -124,7 +124,7 @@ def test_called_with_args() -> None:
             return self.__impl.do_stuff(value) + "!"
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with(42).returns("hello")
+        ctrl.expect(SomeInterface.do_stuff).called_with(42).returns("hello")
         usecase = SomeUsecase(ctrl.get_mock())
 
         assert usecase.business_logic(42) == "hello!"
@@ -136,7 +136,7 @@ def test_verify_fails_on_unsatisfied() -> None:
 
     with pytest.raises(AssertionError, match="Unsatisfied expectations"):
         with Mockamorph(SomeInterface) as ctrl:
-            ctrl.expect().do_stuff().called_with().returns(5)
+            ctrl.expect(SomeInterface.do_stuff).called_with().returns(5)
 
 
 def test_reset_clears_all() -> None:
@@ -144,7 +144,7 @@ def test_reset_clears_all() -> None:
         def do_stuff(self) -> int: ...
 
     mock = Mockamorph(SomeInterface)
-    mock.expect().do_stuff().called_with().returns(5)
+    mock.expect(SomeInterface.do_stuff).called_with().returns(5)
     mock.reset()
     mock.verify()
 
@@ -154,7 +154,9 @@ def test_raises_configured_exception() -> None:
         def do_stuff(self) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with().raises(ValueError("test error"))
+        ctrl.expect(SomeInterface.do_stuff).called_with().raises(
+            ValueError("test error")
+        )
 
         with pytest.raises(ValueError, match="test error"):
             _ = ctrl.get_mock().do_stuff()
@@ -165,8 +167,10 @@ def test_same_method_returns_or_raises() -> None:
         def do_stuff(self, value: int) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_stuff().called_with(1).returns(10)
-        ctrl.expect().do_stuff().called_with(2).raises(ValueError("test error"))
+        ctrl.expect(SomeInterface.do_stuff).called_with(1).returns(10)
+        ctrl.expect(SomeInterface.do_stuff).called_with(2).raises(
+            ValueError("test error")
+        )
         mock = ctrl.get_mock()
 
         assert mock.do_stuff(1) == 10
@@ -188,11 +192,11 @@ def test_args_kwargs_matching() -> None:
 
     with Mockamorph(SomeInterface) as ctrl:
         # keyword only
-        ctrl.expect().do_stuff().called_with(a=1, b="test1").returns(5)
+        ctrl.expect(SomeInterface.do_stuff).called_with(a=1, b="test1").returns(5)
         # one arg, one kwargs
-        ctrl.expect().do_stuff().called_with(2, b="test2").returns(5)
+        ctrl.expect(SomeInterface.do_stuff).called_with(2, b="test2").returns(5)
         # args
-        ctrl.expect().do_stuff().called_with(3, "test3").returns(5)
+        ctrl.expect(SomeInterface.do_stuff).called_with(3, "test3").returns(5)
 
         # exptected with different style of args
         SomeUsecase(ctrl.get_mock()).use(1, "test1")
@@ -209,7 +213,7 @@ def test_incorrect_args() -> None:
 
     with Mockamorph(SomeInterface) as ctrl:
         # expected with non-keyword args
-        ctrl.expect().method_a().called_with(1, "test1").returns("one")
+        ctrl.expect(SomeInterface.method_a).called_with(1, "test1").returns("one")
 
         with pytest.raises(
             AssertionError,
@@ -226,7 +230,9 @@ def test_method_with_nonmatching_args_no_sideeffect() -> None:
         def method_a(self, x: int, y: str) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().method_a().called_with(x=1, y="test1").raises(RuntimeError("!!!"))
+        ctrl.expect(SomeInterface.method_a).called_with(x=1, y="test1").raises(
+            RuntimeError("!!!")
+        )
 
         mock = ctrl.get_mock()
         with pytest.raises(AssertionError, match="Unexpected args for 'method_a'"):
@@ -238,9 +244,9 @@ def test_slash_in_argument_list() -> None:
         def method_a(self, x: int, /, y: str) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        # note: this does not follow original signature
-        ctrl.expect().method_a().called_with(x=1, y="test1").returns("one")
-        ctrl.expect().method_a().called_with(x=3, y="test3").returns("one")
+        # note: this does follow original signature
+        ctrl.expect(SomeInterface.method_a).called_with(1, y="test1").returns("one")
+        ctrl.expect(SomeInterface.method_a).called_with(3, y="test3").returns("one")
 
         mock = ctrl.get_mock()
         with pytest.raises(AssertionError, match="Unexpected args for 'method_a'"):
@@ -254,9 +260,9 @@ def test_star_in_argument_list() -> None:
         def method_a(self, x: int, *, y: str) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        # note: this does not follow original signature
-        ctrl.expect().method_a().called_with(1, "test1").returns("one")
-        ctrl.expect().method_a().called_with(3, "test3").returns("one")
+        # note: this does follow original signature
+        ctrl.expect(SomeInterface.method_a).called_with(1, y="test1").returns("one")
+        ctrl.expect(SomeInterface.method_a).called_with(3, y="test3").returns("one")
 
         mock = ctrl.get_mock()
         with pytest.raises(AssertionError, match="Unexpected args for 'method_a'"):
@@ -271,8 +277,8 @@ def test_multiple_methods_on_mock() -> None:
         def method_b(self, y: str) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().method_a().called_with(1).returns("one")
-        ctrl.expect().method_b().called_with("two").returns(2)
+        ctrl.expect(SomeInterface.method_a).called_with(1).returns("one")
+        ctrl.expect(SomeInterface.method_b).called_with("two").returns(2)
 
         mock = ctrl.get_mock()
         assert mock.method_a(1) == "one"
@@ -284,8 +290,8 @@ def test_method_with_different_args() -> None:
         def calculate(self, x: int, y: int) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().calculate().called_with(1, 2).returns(3)
-        ctrl.expect().calculate().called_with(10, 20).returns(30)
+        ctrl.expect(SomeInterface.calculate).called_with(1, 2).returns(3)
+        ctrl.expect(SomeInterface.calculate).called_with(10, 20).returns(30)
 
         mock = ctrl.get_mock()
         assert mock.calculate(1, 2) == 3
@@ -297,7 +303,7 @@ def test_returns_none() -> None:
         def do_nothing(self) -> None: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().do_nothing().called_with().returns(None)
+        ctrl.expect(SomeInterface.do_nothing).called_with().returns(None)
 
         mock = ctrl.get_mock()
         result = mock.do_nothing()  # type: ignore[func-returns-value]
@@ -311,7 +317,7 @@ def test_returns_dict() -> None:
     expected_data = {"numbers": [1, 2, 3], "more": [4, 5]}
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().get_data().called_with().returns(expected_data)
+        ctrl.expect(SomeInterface.get_data).called_with().returns(expected_data)
 
         mock = ctrl.get_mock()
         assert mock.get_data() == expected_data
@@ -328,7 +334,7 @@ def test_raises_custom_exception_with_attrs() -> None:
         def risky_operation(self) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().risky_operation().called_with().raises(
+        ctrl.expect(SomeInterface.risky_operation).called_with().raises(
             CustomError(404, "not found")
         )
 
@@ -346,10 +352,10 @@ def test_interleaved_method_calls() -> None:
         def bar(self) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().foo().called_with().returns(1)
-        ctrl.expect().bar().called_with().returns("a")
-        ctrl.expect().foo().called_with().returns(2)
-        ctrl.expect().bar().called_with().returns("b")
+        ctrl.expect(SomeInterface.foo).called_with().returns(1)
+        ctrl.expect(SomeInterface.bar).called_with().returns("a")
+        ctrl.expect(SomeInterface.foo).called_with().returns(2)
+        ctrl.expect(SomeInterface.bar).called_with().returns("b")
 
         mock = ctrl.get_mock()
         assert mock.foo() == 1
@@ -363,7 +369,7 @@ def test_verify_passes_when_satisfied() -> None:
         def do_stuff(self) -> int: ...
 
     ctrl = Mockamorph(SomeInterface)
-    ctrl.expect().do_stuff().called_with().returns(5)
+    ctrl.expect(SomeInterface.do_stuff).called_with().returns(5)
 
     mock = ctrl.get_mock()
     assert mock.do_stuff() == 5
@@ -376,10 +382,10 @@ def test_reset_then_new_expectations() -> None:
         def do_stuff(self) -> int: ...
 
     ctrl = Mockamorph(SomeInterface)
-    ctrl.expect().do_stuff().called_with().returns(5)
+    ctrl.expect(SomeInterface.do_stuff).called_with().returns(5)
     ctrl.reset()
 
-    ctrl.expect().do_stuff().called_with().returns(10)
+    ctrl.expect(SomeInterface.do_stuff).called_with().returns(10)
     mock = ctrl.get_mock()
     assert mock.do_stuff() == 10
 
@@ -391,7 +397,9 @@ def test_kwargs_only_args() -> None:
         def configure(self, *, host: str, port: int) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().configure().called_with(host="localhost", port=8080).returns("ok")
+        ctrl.expect(SomeInterface.configure).called_with(
+            host="localhost", port=8080
+        ).returns("ok")
 
         mock = ctrl.get_mock()
         assert mock.configure(host="localhost", port=8080) == "ok"
@@ -402,9 +410,11 @@ def test_alternating_returns_and_raises() -> None:
         def process(self, item: str) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().process().called_with("good").returns("processed")
-        ctrl.expect().process().called_with("bad").raises(ValueError("invalid item"))
-        ctrl.expect().process().called_with("good2").returns("processed2")
+        ctrl.expect(SomeInterface.process).called_with("good").returns("processed")
+        ctrl.expect(SomeInterface.process).called_with("bad").raises(
+            ValueError("invalid item")
+        )
+        ctrl.expect(SomeInterface.process).called_with("good2").returns("processed2")
 
         mock = ctrl.get_mock()
         assert mock.process("good") == "processed"
@@ -424,8 +434,8 @@ def test_abstract_class_multiple_methods() -> None:
         def write(self, key: str, value: str) -> bool: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().read().called_with("mykey").returns("myvalue")
-        ctrl.expect().write().called_with("newkey", "newvalue").returns(True)
+        ctrl.expect(SomeInterface.read).called_with("mykey").returns("myvalue")
+        ctrl.expect(SomeInterface.write).called_with("newkey", "newvalue").returns(True)
 
         mock = ctrl.get_mock()
         assert mock.read("mykey") == "myvalue"
@@ -433,13 +443,14 @@ def test_abstract_class_multiple_methods() -> None:
 
 
 def test_private_attr_expectation_rejected() -> None:
-    class SomeInterface(Protocol): ...
+    class SomeInterface(Protocol):
+        def _private_method(self) -> None: ...
 
     with Mockamorph(SomeInterface) as ctrl:
         with pytest.raises(
             AttributeError, match="Cannot set expectations on private attribute"
         ):
-            ctrl.expect()._private_method()
+            ctrl.expect(SomeInterface._private_method).called_with().returns(None)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_returns_callable_value() -> None:
@@ -450,7 +461,7 @@ def test_returns_callable_value() -> None:
         return x * 2
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().get_callback().called_with().returns(my_callback)
+        ctrl.expect(SomeInterface.get_callback).called_with().returns(my_callback)
 
         mock = ctrl.get_mock()
         callback = mock.get_callback()
@@ -463,9 +474,9 @@ def test_verify_lists_all_unsatisfied() -> None:
         def bar(self) -> str: ...
 
     ctrl = Mockamorph(SomeInterface)
-    ctrl.expect().foo().called_with().returns(1)
-    ctrl.expect().foo().called_with().returns(2)
-    ctrl.expect().bar().called_with().returns("a")
+    ctrl.expect(SomeInterface.foo).called_with().returns(1)
+    ctrl.expect(SomeInterface.foo).called_with().returns(2)
+    ctrl.expect(SomeInterface.bar).called_with().returns("a")
 
     with pytest.raises(
         AssertionError,
@@ -481,7 +492,7 @@ def test_no_args_method() -> None:
         def no_args(self) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().no_args().called_with().returns("result")
+        ctrl.expect(SomeInterface.no_args).called_with().returns("result")
 
         mock = ctrl.get_mock()
         assert mock.no_args() == "result"
@@ -492,8 +503,8 @@ def test_returns_bool() -> None:
         def is_valid(self, value: int) -> bool: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().is_valid().called_with(1).returns(True)
-        ctrl.expect().is_valid().called_with(0).returns(False)
+        ctrl.expect(SomeInterface.is_valid).called_with(1).returns(True)
+        ctrl.expect(SomeInterface.is_valid).called_with(0).returns(False)
 
         mock = ctrl.get_mock()
         assert mock.is_valid(1) is True
@@ -505,7 +516,7 @@ def test_returns_list() -> None:
         def get_items(self) -> list[str]: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().get_items().called_with().returns(["a", "b", "c"])
+        ctrl.expect(SomeInterface.get_items).called_with().returns(["a", "b", "c"])
 
         mock = ctrl.get_mock()
         assert mock.get_items() == ["a", "b", "c"]
@@ -516,8 +527,10 @@ def test_retry_pattern_raises_then_returns() -> None:
         def retry_operation(self) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect().retry_operation().called_with().raises(ConnectionError("failed"))
-        ctrl.expect().retry_operation().called_with().returns("success")
+        ctrl.expect(SomeInterface.retry_operation).called_with().raises(
+            ConnectionError("failed")
+        )
+        ctrl.expect(SomeInterface.retry_operation).called_with().returns("success")
 
         mock = ctrl.get_mock()
 
@@ -534,7 +547,9 @@ class TextFixtureMockamorpthInterface(Protocol):
 @pytest.fixture
 def mockamorph_fixture() -> Mockamorph[TextFixtureMockamorpthInterface]:
     ctrl = Mockamorph(TextFixtureMockamorpthInterface)
-    ctrl.expect().do_stuff().called_with().returns("Hello world")
+    ctrl.expect(TextFixtureMockamorpthInterface.do_stuff).called_with().returns(
+        "Hello world"
+    )
     return ctrl
 
 
@@ -564,11 +579,11 @@ def test_mockamorph_as_fixture_failure(
 
 @pytest.mark.asyncio
 async def test_async_method() -> None:
-    class AsyncInterface(Protocol):
+    class SomeInterface(Protocol):
         async def async_method(self) -> str: ...
 
-    async with Mockamorph(AsyncInterface) as ctrl:
-        ctrl.expect().async_method().awaited_with().returns("Hello world")
+    async with Mockamorph(SomeInterface) as ctrl:
+        ctrl.expect(SomeInterface.async_method).awaited_with().returns("Hello world")
 
         mock = ctrl.get_mock()
 
@@ -577,11 +592,13 @@ async def test_async_method() -> None:
 
 @pytest.mark.asyncio
 async def test_async_method_raises() -> None:
-    class AsyncInterface(Protocol):
+    class SomeInterface(Protocol):
         async def async_method(self) -> str: ...
 
-    async with Mockamorph(AsyncInterface) as ctrl:
-        ctrl.expect().async_method().awaited_with().raises(RuntimeError("Failed"))
+    async with Mockamorph(SomeInterface) as ctrl:
+        ctrl.expect(SomeInterface.async_method).awaited_with().raises(
+            RuntimeError("Failed")
+        )
 
         mock = ctrl.get_mock()
 
@@ -590,21 +607,21 @@ async def test_async_method_raises() -> None:
 
 
 def test_call_method_with_no_expectations() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def process(self) -> str: ...
 
     with pytest.raises(AssertionError, match="Unexpected call"):
-        with Mockamorph(Service) as mock:
+        with Mockamorph(SomeInterface) as mock:
             mock.get_mock().process()
 
 
 def test_call_method_more_times_than_expected() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def get_value(self) -> int: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().get_value().called_with().returns(1)
-        mock.expect().get_value().called_with().returns(2)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.get_value).called_with().returns(1)
+        mock.expect(SomeInterface.get_value).called_with().returns(2)
 
         m = mock.get_mock()
         assert m.get_value() == 1
@@ -614,12 +631,12 @@ def test_call_method_more_times_than_expected() -> None:
 
 
 def test_call_wrong_method() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def method_a(self) -> str: ...
         def method_b(self) -> str: ...
 
-    mock = Mockamorph(Service)
-    mock.expect().method_a().called_with().returns("a")
+    mock = Mockamorph(SomeInterface)
+    mock.expect(SomeInterface.method_a).called_with().returns("a")
     m = mock.get_mock()
 
     with pytest.raises(AssertionError, match="Unexpected call to 'method_b'"):
@@ -629,11 +646,11 @@ def test_call_wrong_method() -> None:
 
 
 def test_wrong_positional_arg_value() -> None:
-    class Calculator(Protocol):
+    class SomeInterface(Protocol):
         def add(self, a: int, b: int) -> int: ...
 
-    with Mockamorph(Calculator) as mock:
-        mock.expect().add().called_with(1, 2).returns(3)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.add).called_with(1, 2).returns(3)
 
         with pytest.raises(
             AssertionError,
@@ -643,11 +660,13 @@ def test_wrong_positional_arg_value() -> None:
 
 
 def test_wrong_keyword_arg_value() -> None:
-    class Config(Protocol):
+    class SomeInterface(Protocol):
         def set_option(self, *, name: str, value: int) -> None: ...
 
-    with Mockamorph(Config) as mock:
-        mock.expect().set_option().called_with(name="debug", value=1).returns(None)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.set_option).called_with(
+            name="debug", value=1
+        ).returns(None)
 
         with pytest.raises(
             AssertionError,
@@ -659,11 +678,11 @@ def test_wrong_keyword_arg_value() -> None:
 
 
 def test_missing_required_arg() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def fetch(self, key: str) -> str: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().fetch().called_with("mykey").returns("value")
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.fetch).called_with("mykey").returns("value")
 
         with pytest.raises(
             AssertionError,
@@ -680,7 +699,7 @@ def test_provided_extra_kwargs() -> None:
         def method_a(self, a: str, b: int) -> None: ...
 
     with Mockamorph(SomeInterface) as mock:
-        mock.expect().method_a().called_with(a="test", b=5).returns(None)
+        mock.expect(SomeInterface.method_a).called_with(a="test", b=5).returns(None)
 
         with pytest.raises(AssertionError, match="unexpected extra=True"):
             # extra argument
@@ -688,15 +707,15 @@ def test_provided_extra_kwargs() -> None:
 
 
 def test_verify_with_partial_satisfaction() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def step1(self) -> None: ...
         def step2(self) -> None: ...
         def step3(self) -> None: ...
 
-    ctrl = Mockamorph(Service)
-    ctrl.expect().step1().called_with().returns(None)
-    ctrl.expect().step2().called_with().returns(None)
-    ctrl.expect().step3().called_with().returns(None)
+    ctrl = Mockamorph(SomeInterface)
+    ctrl.expect(SomeInterface.step1).called_with().returns(None)
+    ctrl.expect(SomeInterface.step2).called_with().returns(None)
+    ctrl.expect(SomeInterface.step3).called_with().returns(None)
 
     m = ctrl.get_mock()
     m.step1()
@@ -711,11 +730,11 @@ def test_verify_with_partial_satisfaction() -> None:
 
 
 def test_verify_called_multiple_times() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def action(self) -> str: ...
 
-    ctrl = Mockamorph(Service)
-    ctrl.expect().action().called_with().returns("done")
+    ctrl = Mockamorph(SomeInterface)
+    ctrl.expect(SomeInterface.action).called_with().returns("done")
 
     ctrl.get_mock().action()
 
@@ -726,12 +745,12 @@ def test_verify_called_multiple_times() -> None:
 
 
 def test_verify_counts_remaining_expectations() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def method(self) -> int: ...
 
-    ctrl = Mockamorph(Service)
+    ctrl = Mockamorph(SomeInterface)
     for i in range(5):
-        ctrl.expect().method().called_with().returns(i)
+        ctrl.expect(SomeInterface.method).called_with().returns(i)
 
     ctrl.get_mock().method()  # Only consume 1 of 5
 
@@ -743,37 +762,37 @@ def test_verify_counts_remaining_expectations() -> None:
 
 
 def test_mock_private_attr_access_rejected() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def method(self) -> str: ...
 
-    ctrl = Mockamorph(Service)
+    ctrl = Mockamorph(SomeInterface)
     with pytest.raises(AttributeError):
         ctrl.get_mock()._something  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue]  # ty:ignore[unresolved-attribute]
 
 
 def test_reuse_after_context_exit() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def get(self) -> int: ...
 
-    ctrl = Mockamorph(Service)
+    ctrl = Mockamorph(SomeInterface)
 
     with ctrl:
-        ctrl.expect().get().called_with().returns(1)
+        ctrl.expect(SomeInterface.get).called_with().returns(1)
         assert ctrl.get_mock().get() == 1
 
     # After exit, set new expectations
-    ctrl.expect().get().called_with().returns(2)
+    ctrl.expect(SomeInterface.get).called_with().returns(2)
     assert ctrl.get_mock().get() == 2
     ctrl.verify()
 
 
 @pytest.mark.asyncio
 async def test_async_method_not_awaited_returns_future() -> None:
-    class AsyncService(Protocol):
+    class SomeInterface(Protocol):
         async def fetch(self) -> str: ...
 
-    async with Mockamorph(AsyncService) as mock:
-        mock.expect().fetch().awaited_with().returns("data")
+    async with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.fetch).awaited_with().returns("data")
 
         result = mock.get_mock().fetch()
         assert asyncio.isfuture(result) or asyncio.iscoroutine(result)
@@ -783,13 +802,13 @@ async def test_async_method_not_awaited_returns_future() -> None:
 
 @pytest.mark.asyncio
 async def test_async_multiple_awaits_fifo() -> None:
-    class AsyncService(Protocol):
+    class SomeInterface(Protocol):
         async def fetch(self) -> int: ...
 
-    async with Mockamorph(AsyncService) as mock:
-        mock.expect().fetch().awaited_with().returns(1)
-        mock.expect().fetch().awaited_with().returns(2)
-        mock.expect().fetch().awaited_with().returns(3)
+    async with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.fetch).awaited_with().returns(1)
+        mock.expect(SomeInterface.fetch).awaited_with().returns(2)
+        mock.expect(SomeInterface.fetch).awaited_with().returns(3)
 
         m = mock.get_mock()
         assert await m.fetch() == 1
@@ -799,13 +818,17 @@ async def test_async_multiple_awaits_fifo() -> None:
 
 @pytest.mark.asyncio
 async def test_async_raises_and_returns_interleaved() -> None:
-    class AsyncService(Protocol):
+    class SomeInterface(Protocol):
         async def call_api(self) -> str: ...
 
-    async with Mockamorph(AsyncService) as mock:
-        mock.expect().call_api().awaited_with().raises(ConnectionError("timeout"))
-        mock.expect().call_api().awaited_with().returns("success")
-        mock.expect().call_api().awaited_with().raises(ConnectionError("again"))
+    async with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.call_api).awaited_with().raises(
+            ConnectionError("timeout")
+        )
+        mock.expect(SomeInterface.call_api).awaited_with().returns("success")
+        mock.expect(SomeInterface.call_api).awaited_with().raises(
+            ConnectionError("again")
+        )
 
         m = mock.get_mock()
 
@@ -820,16 +843,16 @@ async def test_async_raises_and_returns_interleaved() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_expectation_for_async_method_works() -> None:
-    class AsyncService(Protocol):
+    class SomeInterface(Protocol):
         async def fetch(self) -> str: ...
 
     class AsyncUsecase:
-        async def use(self, service: AsyncService) -> str:
+        async def use(self, service: SomeInterface) -> str:
             return await service.fetch()
 
     # Using called_with instead of awaited_with
-    async with Mockamorph(AsyncService) as mock:
-        mock.expect().fetch().called_with().returns("some-value")
+    async with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.fetch).called_with().returns("some-value")
 
         with pytest.raises(
             TypeError, match="object str can't be used in 'await' expression"
@@ -838,32 +861,20 @@ async def test_sync_expectation_for_async_method_works() -> None:
 
 
 def test_call_nonexistent_method() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def existing_method(self) -> str: ...
 
     with pytest.raises(AssertionError, match="Unexpected call"):
-        with Mockamorph(Service) as mock:
+        with Mockamorph(SomeInterface) as mock:
             # No expectation set, so it fails
             mock.get_mock().nonexistent_method()  # type: ignore[attr-defined]
 
 
-def test_expect_nonexistent_method_then_call() -> None:
-    class Service(Protocol):
-        def real_method(self) -> str: ...
-
-    with Mockamorph(Service) as mock:
-        mock.expect().fake_method().called_with().returns("faked")
-        with pytest.raises(
-            AssertionError, match="Method 'fake_method' not found on target type"
-        ):
-            mock.get_mock().fake_method()  # type: ignore[attr-defined]
-
-
 def test_empty_protocol() -> None:
-    class EmptyService(Protocol):
+    class SomeInterface(Protocol):
         pass
 
-    with Mockamorph(EmptyService) as mock:
+    with Mockamorph(SomeInterface) as mock:
         _ = mock.get_mock()
 
 
@@ -876,10 +887,10 @@ def test_empty_abc() -> None:
 
 
 def test_get_mock_returns_same_instance() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def method(self) -> str: ...
 
-    ctrl = Mockamorph(Service)
+    ctrl = Mockamorph(SomeInterface)
     mock1 = ctrl.get_mock()
     mock2 = ctrl.get_mock()
 
@@ -887,31 +898,31 @@ def test_get_mock_returns_same_instance() -> None:
 
 
 def test_expectations_set_after_get_mock() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def method(self) -> int: ...
 
-    ctrl = Mockamorph(Service)
+    ctrl = Mockamorph(SomeInterface)
     mock = ctrl.get_mock()
 
     # Set expectation after getting mock
-    ctrl.expect().method().called_with().returns(42)
+    ctrl.expect(SomeInterface.method).called_with().returns(42)
 
     assert mock.method() == 42
     ctrl.verify()
 
 
 def test_none_as_argument() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def process(self, value: str | None) -> str: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().process().called_with(None).returns("null")
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.process).called_with(None).returns("null")
 
         assert mock.get_mock().process(None) == "null"
 
 
 def test_nested_dict_argument() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def configure(self, config: dict[str, Any]) -> bool: ...
 
     config = {
@@ -923,18 +934,20 @@ def test_nested_dict_argument() -> None:
         "cache": {"enabled": True, "ttl": 300},
     }
 
-    with Mockamorph(Service) as mock:
-        mock.expect().configure().called_with(config).returns(True)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.configure).called_with(config).returns(True)
 
         assert mock.get_mock().configure(config) is True
 
 
 def test_list_argument() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def batch_process(self, items: list[int]) -> int: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().batch_process().called_with([1, 2, 3, 4, 5]).returns(15)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.batch_process).called_with([1, 2, 3, 4, 5]).returns(
+            15
+        )
 
         assert mock.get_mock().batch_process([1, 2, 3, 4, 5]) == 15
 
@@ -946,38 +959,40 @@ def test_dataclass_argument() -> None:
         payload: str
         metadata: dict[str, str] = field(default_factory=dict)
 
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def handle(self, request: Request) -> str: ...
 
     req = Request(id=1, payload="data", metadata={"trace": "abc123"})
 
-    with Mockamorph(Service) as mock:
-        mock.expect().handle().called_with(req).returns("ok")
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.handle).called_with(req).returns("ok")
 
         assert mock.get_mock().handle(req) == "ok"
 
 
 def test_callable_argument() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def register_callback(self, callback: Any) -> None: ...
 
     def my_callback() -> None:
         pass
 
-    with Mockamorph(Service) as mock:
-        mock.expect().register_callback().called_with(my_callback).returns(None)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.register_callback).called_with(my_callback).returns(
+            None
+        )
 
         mock.get_mock().register_callback(my_callback)
 
 
 def test_return_exception_object_not_raise() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def get_error(self) -> Exception: ...
 
     error = ValueError("this is returned, not raised")
 
-    with Mockamorph(Service) as mock:
-        mock.expect().get_error().called_with().returns(error)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.get_error).called_with().returns(error)
 
         result = mock.get_mock().get_error()
         assert result is error
@@ -995,8 +1010,12 @@ def test_return_mock_object() -> None:
         Mockamorph(InnerService) as inner_mock,
         Mockamorph(OuterService) as outer_mock,
     ):
-        inner_mock.expect().inner_method().called_with().returns("inner result")
-        outer_mock.expect().get_inner().called_with().returns(inner_mock.get_mock())
+        inner_mock.expect(InnerService.inner_method).called_with().returns(
+            "inner result"
+        )
+        outer_mock.expect(OuterService.get_inner).called_with().returns(
+            inner_mock.get_mock()
+        )
 
         outer = outer_mock.get_mock()
         inner = outer.get_inner()
@@ -1004,7 +1023,7 @@ def test_return_mock_object() -> None:
 
 
 def test_return_generator_function() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def get_generator(self) -> Any: ...
 
     def my_gen() -> Any:
@@ -1012,47 +1031,47 @@ def test_return_generator_function() -> None:
         yield 2
         yield 3
 
-    with Mockamorph(Service) as mock:
-        mock.expect().get_generator().called_with().returns(my_gen)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.get_generator).called_with().returns(my_gen)
 
         result = mock.get_mock().get_generator()
         assert list(result()) == [1, 2, 3]
 
 
 def test_return_tuple_single_element() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def get_single(self) -> tuple[int]: ...
         def get_value(self) -> int: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().get_single().called_with().returns((42,))
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.get_single).called_with().returns((42,))
         assert mock.get_mock().get_single() == (42,)
 
-        mock.expect().get_value().called_with().returns(42)
+        mock.expect(SomeInterface.get_value).called_with().returns(42)
         assert mock.get_mock().get_value() == 42
 
 
 def test_raise_base_exception() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def critical(self) -> None: ...
 
-    with Mockamorph(Service) as mock:
-        mock.expect().critical().called_with().raises(SystemExit(1))
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.critical).called_with().raises(SystemExit(1))
 
         with pytest.raises(SystemExit):
             mock.get_mock().critical()
 
 
 def test_raise_exception_with_cause() -> None:
-    class Service(Protocol):
+    class SomeInterface(Protocol):
         def risky(self) -> None: ...
 
     original = ValueError("original error")
     chained = RuntimeError("wrapper error")
     chained.__cause__ = original
 
-    with Mockamorph(Service) as mock:
-        mock.expect().risky().called_with().raises(chained)
+    with Mockamorph(SomeInterface) as mock:
+        mock.expect(SomeInterface.risky).called_with().raises(chained)
 
         with pytest.raises(RuntimeError) as exc_info:
             mock.get_mock().risky()
@@ -1078,7 +1097,7 @@ def test_enter_context_manager() -> None:
                 return session
 
     with Mockamorph(Transactor[Session]) as ctrl:
-        ctrl.expect().session().entered_with().yields(Session(x=5))
+        ctrl.expect(Transactor[Session].session).entered_with().yields(Session(x=5))
         assert Usecase(ctrl.get_mock()).do_stuff().x == 5
 
 
@@ -1102,7 +1121,9 @@ async def test_enter_async_context_manager() -> None:
                 return session
 
     async with Mockamorph(Transactor[Session]) as ctrl:
-        ctrl.expect().session().async_entered_with().yields(Session(x=5))
+        ctrl.expect(Transactor[Session].session).async_entered_with().yields(
+            Session(x=5)
+        )
 
         r = await Usecase(ctrl.get_mock()).do_stuff()
         assert r.x == 5

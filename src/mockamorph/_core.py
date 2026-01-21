@@ -4,10 +4,12 @@ import asyncio
 import contextlib
 import inspect
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import (
     Any,
+    Concatenate,
     Never,
     Protocol,
     cast,
@@ -46,13 +48,13 @@ class ExpectationFinder(Protocol):
 
 
 @final
-class ReturnSetter:
+class ReturnSetter[T]:
     def __init__(self, expectation: Expectation, registrar: Registrar) -> None:
         self._expectation = expectation
         self._registrar = registrar
 
-    def returns(self, *values: Any) -> None:
-        self._expectation.return_value = values[0] if len(values) == 1 else values
+    def returns(self, value: T) -> None:
+        self._expectation.return_value = value
         self._expectation.exception = None
 
         self._registrar.register(self._expectation)
@@ -63,69 +65,50 @@ class ReturnSetter:
 
         self._registrar.register(self._expectation)
 
-    def yields(self, *values: Any) -> None:
-        self._expectation.return_value = values[0] if len(values) == 1 else values
+    def yields(self, values: T) -> None:
+        self._expectation.return_value = values
         self._expectation.exception = None
 
         self._registrar.register(self._expectation)
 
 
 @final
-class CallArgsSetter:
+class CallArgsSetter[**ParamT, ReturnT]:
     def __init__(self, expectation: Expectation, registrar: Registrar) -> None:
         self._expectation = expectation
         self._registrar = registrar
 
-    def called_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+    def called_with(
+        self, *args: ParamT.args, **kwargs: ParamT.kwargs
+    ) -> ReturnSetter[ReturnT]:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
         self._expectation.kind = ExpectionKind.FUNCTION
         return ReturnSetter(self._expectation, self._registrar)
 
-    def awaited_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+    def awaited_with(
+        self, *args: ParamT.args, **kwargs: ParamT.kwargs
+    ) -> ReturnSetter[ReturnT]:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
         self._expectation.kind = ExpectionKind.COROUTINE
         return ReturnSetter(self._expectation, self._registrar)
 
-    def entered_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+    def entered_with(
+        self, *args: ParamT.args, **kwargs: ParamT.kwargs
+    ) -> ReturnSetter[ReturnT]:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
         self._expectation.kind = ExpectionKind.CONTEXT_MANAGER
         return ReturnSetter(self._expectation, self._registrar)
 
-    def async_entered_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+    def async_entered_with(
+        self, *args: ParamT.args, **kwargs: ParamT.kwargs
+    ) -> ReturnSetter[ReturnT]:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
         self._expectation.kind = ExpectionKind.ASYNC_CONTEXT_MANAGER
         return ReturnSetter(self._expectation, self._registrar)
-
-
-@final
-class MethodProxy:
-    def __init__(self, method_name: str, registrar: Registrar) -> None:
-        self._method_name = method_name
-        self._registrar = registrar
-
-    def __call__(self) -> CallArgsSetter:
-        return CallArgsSetter(
-            Expectation(method_name=self._method_name), self._registrar
-        )
-
-
-@final
-class ExpectationBuilder:
-    # todo: infer typing and function annotation for static checking
-
-    def __init__(self, registrar: Registrar) -> None:
-        self._registrar = registrar
-
-    def __getattr__(self, name: str) -> MethodProxy:
-        if name.startswith("_"):
-            raise AttributeError(
-                f"Cannot set expectations on private attribute: {name}"
-            )
-        return MethodProxy(name, self._registrar)
 
 
 @final
@@ -272,15 +255,24 @@ class _MockProxyImpl[T]:
 
 
 @final
-class Mockamorph[T]:
-    def __init__(self, target: type[T]) -> None:
+class Mockamorph[TargetT]:
+    def __init__(self, target: type[TargetT]) -> None:
+        self._target = target
         self._ctrl = MockController(target)
 
-    def get_mock(self) -> T:
+    def get_mock(self) -> TargetT:
         return self._ctrl.mock
 
-    def expect(self) -> ExpectationBuilder:
-        return ExpectationBuilder(self._ctrl)
+    def expect[**MethodParam, ReturnT](
+        self, method: Callable[Concatenate[TargetT, MethodParam], ReturnT]
+    ) -> CallArgsSetter[MethodParam, ReturnT]:
+        if method.__name__.startswith("_"):
+            raise AttributeError("Cannot set expectations on private attribute")
+
+        return CallArgsSetter[MethodParam, ReturnT](
+            Expectation(method_name=method.__name__),
+            self._ctrl,
+        )
 
     def verify(self) -> None:
         self._ctrl.verify()
@@ -288,7 +280,7 @@ class Mockamorph[T]:
     def reset(self) -> None:
         self._ctrl.reset()
 
-    def __enter__(self) -> Mockamorph[T]:
+    def __enter__(self) -> Mockamorph[TargetT]:
         return self
 
     def __exit__(
@@ -300,7 +292,7 @@ class Mockamorph[T]:
         _ = exc_type, exc_val, exc_tb
         self.verify()
 
-    async def __aenter__(self) -> Mockamorph[T]:
+    async def __aenter__(self) -> Mockamorph[TargetT]:
         return self
 
     async def __aexit__(
