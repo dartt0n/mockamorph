@@ -1,7 +1,8 @@
 import asyncio
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -1057,3 +1058,51 @@ def test_raise_exception_with_cause() -> None:
             mock.get_mock().risky()
 
         assert exc_info.value.__cause__ is original
+
+
+def test_enter_context_manager() -> None:
+    @dataclass
+    class Session:
+        x: int
+
+    class Transactor[T](Protocol):
+        @contextmanager
+        def session(self) -> Generator[T, None, None]: ...
+
+    class Usecase[T]:
+        def __init__(self, dep: Transactor[T]) -> None:
+            self._dep = dep
+
+        def do_stuff(self) -> T:
+            with self._dep.session() as session:
+                return session
+
+    with Mockamorph(Transactor[Session]) as ctrl:
+        ctrl.expect().session().entered_with().yields(Session(x=5))
+        assert Usecase(ctrl.get_mock()).do_stuff().x == 5
+
+
+@pytest.mark.asyncio
+async def test_enter_async_context_manager() -> None:
+    @dataclass
+    class Session:
+        x: int
+
+    class Transactor[T](Protocol):
+        @asynccontextmanager
+        async def session(self) -> AsyncGenerator[T, None]:
+            yield None  # type: ignore # pyright: ignore[reportReturnType]
+
+    class Usecase[T]:
+        def __init__(self, dep: Transactor[T]) -> None:
+            self._dep = dep
+
+        async def do_stuff(self) -> T:
+            async with self._dep.session() as session:
+                return session
+
+    async with Mockamorph(Transactor[Session]) as ctrl:
+        ctrl.expect().session().async_entered_with().yields(Session(x=5))
+
+        r = await Usecase(ctrl.get_mock()).do_stuff()
+        assert r.x == 5

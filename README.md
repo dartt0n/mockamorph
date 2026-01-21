@@ -310,6 +310,35 @@ async with Mockamorph(RemoteServer) as mock:
     assert await source.fetch() == b"ok"
 ```
 
+### Context Managers
+
+```python
+class Repository[T](Protocol):
+    @contextmanager
+    def session(self) -> Generator[T, None, None]: ...
+
+    def save_user(self, session: T, user: str) -> None: ...
+
+class Usecase:
+    def __init__[T](self, dep: Repository[T]) -> None:
+        self._dep = dep
+
+    def save(self, name: str):
+        with self._dep.session() as session:
+            self._dep.save_user(session, "user:" + name)
+
+mock_session = object()
+test_name = "hello"
+
+with Mockamorph(Repository[object]) as ctrl:
+    ctrl.expect().session().entered_with().yields(mock_session)
+    ctrl.expect().save_user().called_with(
+        mock_session, f"user:{test_name}"
+    ).returns(None)
+
+    Usecase(ctrl.get_mock()).save(test_name)
+```
+
 ## Development
 
 ### Setup

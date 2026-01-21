@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 from collections import defaultdict
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import (
     Any,
     Never,
@@ -13,12 +15,22 @@ from typing import (
 )
 
 
+class ExpectionKind(Enum):
+    FUNCTION = auto()
+    COROUTINE = auto()
+    CONTEXT_MANAGER = auto()
+    ASYNC_CONTEXT_MANAGER = auto()
+
+
 @dataclass(frozen=False, kw_only=True, slots=True)
 class Expectation:
     method_name: str
-    awaitable: bool = False
+
+    kind: ExpectionKind = ExpectionKind.FUNCTION
+
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwargs: dict[str, Any] = field(default_factory=dict)
+
     return_value: Any = None
     exception: BaseException | None = AssertionError(
         "Expectation was not properly initialized"
@@ -51,6 +63,12 @@ class ReturnSetter:
 
         self._registrar.register(self._expectation)
 
+    def yields(self, *values: Any) -> None:
+        self._expectation.return_value = values[0] if len(values) == 1 else values
+        self._expectation.exception = None
+
+        self._registrar.register(self._expectation)
+
 
 @final
 class CallArgsSetter:
@@ -61,13 +79,25 @@ class CallArgsSetter:
     def called_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
-        self._expectation.awaitable = False
+        self._expectation.kind = ExpectionKind.FUNCTION
         return ReturnSetter(self._expectation, self._registrar)
 
     def awaited_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
         self._expectation.args = args
         self._expectation.kwargs = kwargs
-        self._expectation.awaitable = True
+        self._expectation.kind = ExpectionKind.COROUTINE
+        return ReturnSetter(self._expectation, self._registrar)
+
+    def entered_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+        self._expectation.args = args
+        self._expectation.kwargs = kwargs
+        self._expectation.kind = ExpectionKind.CONTEXT_MANAGER
+        return ReturnSetter(self._expectation, self._registrar)
+
+    def async_entered_with(self, *args: Any, **kwargs: Any) -> ReturnSetter:
+        self._expectation.args = args
+        self._expectation.kwargs = kwargs
+        self._expectation.kind = ExpectionKind.ASYNC_CONTEXT_MANAGER
         return ReturnSetter(self._expectation, self._registrar)
 
 
@@ -159,19 +189,31 @@ class _MockProxyImpl[T]:
 
             self._assert_expectation_args(expectation, name, args, kwargs)
 
-            if expectation.exception is not None:
-                if not expectation.awaitable:
+            if expectation.kind == ExpectionKind.FUNCTION:
+                if expectation.exception is not None:
                     raise expectation.exception
+                return expectation.return_value
 
-                failed_future: asyncio.Future[Never] = asyncio.Future()
-                failed_future.set_exception(expectation.exception)
-                return failed_future
+            if expectation.kind == ExpectionKind.COROUTINE:
+                if expectation.exception is not None:
+                    failed_future: asyncio.Future[Never] = asyncio.Future()
+                    failed_future.set_exception(expectation.exception)
+                    return failed_future
 
-            if expectation.awaitable:
                 succeeded_future: asyncio.Future[Any] = asyncio.Future()
                 succeeded_future.set_result(expectation.return_value)
                 return succeeded_future
 
+            if (
+                expectation.kind == ExpectionKind.CONTEXT_MANAGER
+                or expectation.kind == ExpectionKind.ASYNC_CONTEXT_MANAGER
+            ):
+                if expectation.exception is not None:
+                    raise expectation.exception
+
+                return contextlib.nullcontext(enter_result=expectation.return_value)
+
+            # fallback to function
             return expectation.return_value
 
         return _mock_method
