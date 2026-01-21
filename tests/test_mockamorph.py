@@ -1060,7 +1060,7 @@ def test_raise_exception_with_cause() -> None:
         assert exc_info.value.__cause__ is original
 
 
-def test_enter_context_manager():
+def test_enter_context_manager() -> None:
     @dataclass
     class Session:
         x: int
@@ -1083,7 +1083,7 @@ def test_enter_context_manager():
 
 
 @pytest.mark.asyncio
-async def test_enter_async_context_manager():
+async def test_enter_async_context_manager() -> None:
     @dataclass
     class Session:
         x: int

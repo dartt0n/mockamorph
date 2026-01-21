@@ -289,7 +289,7 @@ def test_mocking_custom_class() -> None:
         assert GreeterUsecase(ctrl.get_mock()).greet("мир") == "Привет мир!"
 
 
-def test_enter_context_manager():
+def test_enter_context_manager() -> None:
     class Repository[T](Protocol):
         @contextmanager
         def session(self) -> Generator[T, None, None]: ...
@@ -300,7 +300,7 @@ def test_enter_context_manager():
         def __init__[T](self, dep: Repository[T]) -> None:
             self._dep = dep
 
-        def save(self, name: str):
+        def save(self, name: str) -> None:
             with self._dep.session() as session:
                 self._dep.save_user(session, "user:" + name)
 
