@@ -35,9 +35,9 @@ def test_quick_example_user_service() -> None:
     """Test the quick example from README."""
     with Mockamorph(UserRepository) as mock:
         # Set expectations BEFORE calling code
-        mock.expect().get_user().called_with(42).returns("Alice")
-        mock.expect().save_user().called_with("Bob").returns(True)
-        mock.expect().save_user().called_with("").raises(RuntimeError("Invalid name"))
+        mock.expect(UserRepository.get_user).called_with(42).returns("Alice")
+        mock.expect(UserRepository.save_user).called_with("Bob").returns(True)
+        mock.expect(UserRepository.save_user).called_with("").raises(RuntimeError("Invalid name"))
 
         # Use the mock
         service = UserService(mock.get_mock())
@@ -93,9 +93,7 @@ def test_motivation_example_create_user() -> None:
     email = "test@example.com"
 
     with Mockamorph(UserRepositoryForMotivation) as ctrl:
-        ctrl.expect().save_user().called_with(User(email=email, token=10)).returns(
-            User(email=email, token=10, id=1)
-        )
+        ctrl.expect(UserRepositoryForMotivation.save_user).called_with(User(email=email, token=10)).returns(User(email=email, token=10, id=1))
 
         usecase = CreateNewUserUsecase(ctrl.get_mock())
         result = usecase.create_user(email)
@@ -135,25 +133,19 @@ def test_greet_table_driven() -> None:
     tests: list[Test] = [
         {
             "name": "greets alice",
-            "mock": lambda m: m.expect()
-            .greet()
-            .called_with("Alice")
-            .returns("Hello, Alice"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Alice").returns("Hello, Alice"),
             "input": "Alice",
             "expected": "Hello, Alice!",
         },
         {
             "name": "greets bob",
-            "mock": lambda m: m.expect().greet().called_with("Bob").returns("Hi, Bob"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Bob").returns("Hi, Bob"),
             "input": "Bob",
             "expected": "Hi, Bob!",
         },
         {
             "name": "greets empty",
-            "mock": lambda m: m.expect()
-            .greet()
-            .called_with("")
-            .returns("Hello, stranger"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("").returns("Hello, stranger"),
             "input": "",
             "expected": "Hello, stranger!",
         },
@@ -181,7 +173,7 @@ class Calculator(Protocol):
 def test_basic_mocking() -> None:
     """Test the basic mocking example from README."""
     with Mockamorph(Calculator) as mock:
-        mock.expect().add().called_with(2, 3).returns(5)
+        mock.expect(Calculator.add).called_with(2, 3).returns(5)
 
         calc = mock.get_mock()
         assert calc.add(2, 3) == 5
@@ -190,9 +182,9 @@ def test_basic_mocking() -> None:
 def test_multiple_return_values_fifo() -> None:
     """Test the multiple return values FIFO example from README."""
     with Mockamorph(Calculator) as mock:
-        mock.expect().add().called_with(1, 1).returns(2)
+        mock.expect(Calculator.add).called_with(1, 1).returns(2)
         # Different return for same args
-        mock.expect().add().called_with(1, 1).returns(3)
+        mock.expect(Calculator.add).called_with(1, 1).returns(3)
 
         calc = mock.get_mock()
         assert calc.add(1, 1) == 2  # First call
@@ -208,9 +200,7 @@ class FileReader(Protocol):
 def test_raising_exceptions() -> None:
     """Test the raising exceptions example from README."""
     with Mockamorph(FileReader) as mock:
-        mock.expect().read().called_with("/missing").raises(
-            FileNotFoundError("Not found")
-        )
+        mock.expect(FileReader.read).called_with("/missing").raises(FileNotFoundError("Not found"))
 
         reader = mock.get_mock()
         with pytest.raises(FileNotFoundError):
@@ -226,8 +216,7 @@ class DataSource(Protocol):
 def test_returning_tuples() -> None:
     """Test the returning tuples example from README."""
     with Mockamorph(DataSource) as mock:
-        # Use multiple arguments to returns() for tuple unpacking
-        mock.expect().fetch().called_with().returns(42, "hello", True)
+        mock.expect(DataSource.fetch).called_with().returns((42, "hello", True))
 
         source = mock.get_mock()
         x, y, z = source.fetch()
@@ -237,7 +226,7 @@ def test_returning_tuples() -> None:
 def test_manual_verification() -> None:
     """Test the manual verification example from README."""
     mock = Mockamorph(Calculator)
-    mock.expect().add().called_with(1, 2).returns(3)
+    mock.expect(Calculator.add).called_with(1, 2).returns(3)
 
     calc = mock.get_mock()
     calc.add(1, 2)
@@ -248,7 +237,7 @@ def test_manual_verification() -> None:
 def test_resetting_expectations() -> None:
     """Test the resetting expectations example from README."""
     mock = Mockamorph(Calculator)
-    mock.expect().add().called_with(1, 2).returns(3)
+    mock.expect(Calculator.add).called_with(1, 2).returns(3)
     mock.reset()  # Clear all expectations
     mock.verify()  # Passes - no expectations to satisfy
 
@@ -263,7 +252,7 @@ class RemoteServer(Protocol):
 async def test_async_support() -> None:
     """Test the async support example from README."""
     async with Mockamorph(RemoteServer) as mock:
-        mock.expect().fetch().awaited_with(resource="resA").returns(b"ok")
+        mock.expect(RemoteServer.fetch).awaited_with(resource="resA").returns(b"ok")
 
         source = mock.get_mock()
         assert await source.fetch(resource="resA") == b"ok"
@@ -284,7 +273,7 @@ def test_mocking_custom_class() -> None:
     assert GreeterUsecase(Translator()).greet("world") == "Hello world!"
 
     with Mockamorph(Translator) as ctrl:
-        ctrl.expect().get_hello().called_with().returns("Привет")
+        ctrl.expect(Translator.get_hello).called_with().returns("Привет")
 
         assert GreeterUsecase(ctrl.get_mock()).greet("мир") == "Привет мир!"
 
@@ -308,9 +297,7 @@ def test_enter_context_manager() -> None:
     test_name = "hello"
 
     with Mockamorph(Repository[object]) as ctrl:
-        ctrl.expect().session().entered_with().yields(mock_session)
-        ctrl.expect().save_user().called_with(
-            mock_session, f"user:{test_name}"
-        ).returns(None)
+        ctrl.expect(Repository[object].session).entered_with().yields(mock_session)
+        ctrl.expect(Repository[object].save_user).called_with(mock_session, f"user:{test_name}").returns(None)
 
         Usecase(ctrl.get_mock()).save(test_name)

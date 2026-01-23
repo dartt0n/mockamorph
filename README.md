@@ -42,9 +42,9 @@ class UserService:
 def test_user_service():
     with Mockamorph(UserRepository) as mock:
         # Set expectations BEFORE calling code
-        mock.expect().get_user().called_with(42).returns("Alice")
-        mock.expect().save_user().called_with("Bob").returns(True)
-        mock.expect().save_user().called_with("").raises(RuntimeError("Invalid name"))
+        mock.expect(UserRepository.get_user).called_with(42).returns("Alice")
+        mock.expect(UserRepository.save_user).called_with("Bob").returns(True)
+        mock.expect(UserRepository.save_user).called_with("").raises(RuntimeError("Invalid name"))
 
         # Use the mock
         service = UserService(mock.get_mock())
@@ -115,7 +115,7 @@ def test_create_user():
     email = "test@example.com"
     
     with Mockamorph(UserRepository) as ctrl:
-        ctrl.expect().save_user().called_with(
+        ctrl.expect(UserRepository.save_user).called_with(
             User(email=email, token=10)
         ).returns(
             User(email=email, token=10, id=1)
@@ -163,19 +163,19 @@ def test_greet_table_driven() -> None:
     tests: list[Test] = [
         {
             "name": "greets alice",
-            "mock": lambda m: m.expect().greet().called_with("Alice").returns("Hello, Alice"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Alice").returns("Hello, Alice"),
             "input": "Alice",
             "expected": "Hello, Alice!",
         },
         {
             "name": "greets bob",
-            "mock": lambda m: m.expect().greet().called_with("Bob").returns("Hi, Bob"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Bob").returns("Hi, Bob"),
             "input": "Bob",
             "expected": "Hi, Bob!",
         },
         {
             "name": "greets empty",
-            "mock": lambda m: m.expect().greet().called_with("").returns("Hello, stranger"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("").returns("Hello, stranger"),
             "input": "",
             "expected": "Hello, stranger!",
         },
@@ -206,7 +206,7 @@ class Calculator(Protocol):
     def add(self, a: int, b: int) -> int: ...
 
 with Mockamorph(Calculator) as mock:
-    mock.expect().add().called_with(2, 3).returns(5)
+    mock.expect(Calculator.add).called_with(2, 3).returns(5)
     
     calc = mock.get_mock()
     assert calc.add(2, 3) == 5
@@ -230,7 +230,7 @@ assert GreeterUsecase(Translator()).greet("world") == "Hello world!"
 
 # test with a mock
 with Mockamorph(Translator) as ctrl:
-    ctrl.expect().get_hello().called_with().returns("Привет")
+    ctrl.expect(Translator.get_hello).called_with().returns("Привет")
 
     assert GreeterUsecase(ctrl.get_mock()).greet("мир") == "Привет мир!"
 ```
@@ -239,8 +239,8 @@ with Mockamorph(Translator) as ctrl:
 
 ```python
 with Mockamorph(Calculator) as mock:
-    mock.expect().add().called_with(1, 1).returns(2)
-    mock.expect().add().called_with(1, 1).returns(3)  # Different return for same args
+    mock.expect(Calculator.add).called_with(1, 1).returns(2)
+    mock.expect(Calculator.add).called_with(1, 1).returns(3)  # Different return for same args
     
     calc = mock.get_mock()
     assert calc.add(1, 1) == 2  # First call
@@ -254,7 +254,7 @@ class FileReader(Protocol):
     def read(self, path: str) -> str: ...
 
 with Mockamorph(FileReader) as mock:
-    mock.expect().read().called_with("/missing").raises(FileNotFoundError("Not found"))
+    mock.expect(FileReader.read).called_with("/missing").raises(FileNotFoundError("Not found"))
     
     reader = mock.get_mock()
     with pytest.raises(FileNotFoundError):
@@ -268,8 +268,8 @@ class DataSource(Protocol):
     def fetch(self) -> tuple[int, str, bool]: ...
 
 with Mockamorph(DataSource) as mock:
-    # Use multiple arguments to returns() for tuple unpacking
-    mock.expect().fetch().called_with().returns(42, "hello", True)
+    # Use tuple as argument to returns() for tuple unpacking
+    mock.expect().fetch().called_with().returns((42, "hello", True))
     
     source = mock.get_mock()
     x, y, z = source.fetch()
@@ -280,7 +280,7 @@ with Mockamorph(DataSource) as mock:
 
 ```python
 mock = Mockamorph(Calculator)
-mock.expect().add().called_with(1, 2).returns(3)
+mock.expect(Calculator.add).called_with(1, 2).returns(3)
 
 calc = mock.get_mock()
 calc.add(1, 2)
@@ -292,7 +292,7 @@ mock.verify()  # Manually verify all expectations were satisfied
 
 ```python
 mock = Mockamorph(Calculator)
-mock.expect().add().called_with(1, 2).returns(3)
+mock.expect(Calculator.add).called_with(1, 2).returns(3)
 mock.reset()  # Clear all expectations
 mock.verify()  # Passes - no expectations to satisfy
 ```
@@ -304,7 +304,7 @@ class RemoteServer(Protocol):
     async def fetch(self, resource: str) -> bytes: ...
 
 async with Mockamorph(RemoteServer) as mock:
-    mock.expect().fetch().awaited_with(resource="resA").returns(b"ok")
+    mock.expect(RemoteServer.fetch).awaited_with(resource="resA").returns(b"ok")
     
     source = mock.get_mock()
     assert await source.fetch() == b"ok"
@@ -331,8 +331,8 @@ mock_session = object()
 test_name = "hello"
 
 with Mockamorph(Repository[object]) as ctrl:
-    ctrl.expect().session().entered_with().yields(mock_session)
-    ctrl.expect().save_user().called_with(
+    ctrl.expect(Repository[object].session).entered_with().yields(mock_session)
+    ctrl.expect(Repository[object].save_user).called_with(
         mock_session, f"user:{test_name}"
     ).returns(None)
 
