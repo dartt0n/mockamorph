@@ -4,16 +4,19 @@ import asyncio
 import contextlib
 import inspect
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import (
     Any,
+    AsyncContextManager,
     Concatenate,
+    ContextManager,
     Never,
     Protocol,
     cast,
     final,
+    overload,
 )
 
 
@@ -255,21 +258,40 @@ class _MockProxyImpl[T]:
 
 
 @final
-class Mockamorph[TargetT]:
-    def __init__(self, target: type[TargetT]) -> None:
+class Mockamorph[T]:
+    def __init__(self, target: type[T]) -> None:
         self._target = target
         self._ctrl = MockController(target)
 
-    def get_mock(self) -> TargetT:
+    def get_mock(self) -> T:
         return self._ctrl.mock
 
-    def expect[**MethodParam, ReturnT](
-        self, method: Callable[Concatenate[TargetT, MethodParam], ReturnT]
-    ) -> CallArgsSetter[MethodParam, ReturnT]:
+    @overload
+    def expect[**P, R](
+        self,
+        method: Callable[
+            Concatenate[T, P],
+            ContextManager[R] | AsyncContextManager[R] | Awaitable[R],
+        ],
+    ) -> CallArgsSetter[P, R]: ...
+
+    @overload
+    def expect[**P, R](
+        self,
+        method: Callable[Concatenate[T, P], R],
+    ) -> CallArgsSetter[P, R]: ...
+
+    def expect[**P, R](
+        self,
+        method: Callable[
+            Concatenate[T, P],
+            ContextManager[R] | AsyncContextManager[R] | Awaitable[R] | R,
+        ],
+    ) -> CallArgsSetter[P, R]:
         if method.__name__.startswith("_"):
             raise AttributeError("Cannot set expectations on private attribute")
 
-        return CallArgsSetter[MethodParam, ReturnT](
+        return CallArgsSetter[P, R](
             Expectation(method_name=method.__name__),
             self._ctrl,
         )
@@ -280,7 +302,7 @@ class Mockamorph[TargetT]:
     def reset(self) -> None:
         self._ctrl.reset()
 
-    def __enter__(self) -> Mockamorph[TargetT]:
+    def __enter__(self) -> Mockamorph[T]:
         return self
 
     def __exit__(
@@ -292,7 +314,7 @@ class Mockamorph[TargetT]:
         _ = exc_type, exc_val, exc_tb
         self.verify()
 
-    async def __aenter__(self) -> Mockamorph[TargetT]:
+    async def __aenter__(self) -> Mockamorph[T]:
         return self
 
     async def __aexit__(
