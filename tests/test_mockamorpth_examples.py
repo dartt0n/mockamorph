@@ -37,9 +37,7 @@ def test_quick_example_user_service() -> None:
         # Set expectations BEFORE calling code
         mock.expect(UserRepository.get_user).called_with(42).returns("Alice")
         mock.expect(UserRepository.save_user).called_with("Bob").returns(True)
-        mock.expect(UserRepository.save_user).called_with("").raises(
-            RuntimeError("Invalid name")
-        )
+        mock.expect(UserRepository.save_user).called_with("").raises(RuntimeError("Invalid name"))
 
         # Use the mock
         service = UserService(mock.get_mock())
@@ -95,9 +93,7 @@ def test_motivation_example_create_user() -> None:
     email = "test@example.com"
 
     with Mockamorph(UserRepositoryForMotivation) as ctrl:
-        ctrl.expect(UserRepositoryForMotivation.save_user).called_with(
-            User(email=email, token=10)
-        ).returns(User(email=email, token=10, id=1))
+        ctrl.expect(UserRepositoryForMotivation.save_user).called_with(User(email=email, token=10)).returns(User(email=email, token=10, id=1))
 
         usecase = CreateNewUserUsecase(ctrl.get_mock())
         result = usecase.create_user(email)
@@ -137,25 +133,19 @@ def test_greet_table_driven() -> None:
     tests: list[Test] = [
         {
             "name": "greets alice",
-            "mock": lambda m: m.expect(Greeter.greet)
-            .called_with("Alice")
-            .returns("Hello, Alice"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Alice").returns("Hello, Alice"),
             "input": "Alice",
             "expected": "Hello, Alice!",
         },
         {
             "name": "greets bob",
-            "mock": lambda m: m.expect(Greeter.greet)
-            .called_with("Bob")
-            .returns("Hi, Bob"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("Bob").returns("Hi, Bob"),
             "input": "Bob",
             "expected": "Hi, Bob!",
         },
         {
             "name": "greets empty",
-            "mock": lambda m: m.expect(Greeter.greet)
-            .called_with("")
-            .returns("Hello, stranger"),
+            "mock": lambda m: m.expect(Greeter.greet).called_with("").returns("Hello, stranger"),
             "input": "",
             "expected": "Hello, stranger!",
         },
@@ -210,9 +200,7 @@ class FileReader(Protocol):
 def test_raising_exceptions() -> None:
     """Test the raising exceptions example from README."""
     with Mockamorph(FileReader) as mock:
-        mock.expect(FileReader.read).called_with("/missing").raises(
-            FileNotFoundError("Not found")
-        )
+        mock.expect(FileReader.read).called_with("/missing").raises(FileNotFoundError("Not found"))
 
         reader = mock.get_mock()
         with pytest.raises(FileNotFoundError):
@@ -310,8 +298,6 @@ def test_enter_context_manager() -> None:
 
     with Mockamorph(Repository[object]) as ctrl:
         ctrl.expect(Repository[object].session).entered_with().yields(mock_session)
-        ctrl.expect(Repository[object].save_user).called_with(
-            mock_session, f"user:{test_name}"
-        ).returns(None)
+        ctrl.expect(Repository[object].save_user).called_with(mock_session, f"user:{test_name}").returns(None)
 
         Usecase(ctrl.get_mock()).save(test_name)

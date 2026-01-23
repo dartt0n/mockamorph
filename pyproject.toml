@@ -57,6 +57,14 @@ packages = ["src/mockamorph"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+
+[tool.ruff]
+exclude = [".venv"]
+line-length = 144
+indent-width = 4
+target-version = "py312"
+fix = true
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

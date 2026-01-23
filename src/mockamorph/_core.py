@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import collections.abc as collections
+import collections.abc as cabc
 import contextlib
 import inspect
 import typing
@@ -26,9 +26,7 @@ class Expectation:
     kwargs: dict[str, object] = field(default_factory=dict)
 
     returns: object | None = None
-    raises: BaseException | None = AssertionError(
-        "Expectation was not properly initialized"
-    )
+    raises: BaseException | None = AssertionError("Expectation was not properly initialized")
 
     def get_result(self) -> object:
         if self.raises is not None:
@@ -51,7 +49,7 @@ class ContextManagerExpectation(Expectation):
     kind: ExpectionKind = ExpectionKind.CONTEXT_MANAGER
 
     @contextlib.contextmanager
-    def get_result(self) -> collections.Generator[object]:
+    def get_result(self) -> cabc.Generator[object]:
         if self.raises is not None:
             raise self.raises
 
@@ -62,7 +60,7 @@ class AsyncContextManagerExpectation(Expectation):
     kind: ExpectionKind = ExpectionKind.ASYNC_CONTEXT_MANAGER
 
     @contextlib.asynccontextmanager
-    async def get_result(self) -> collections.AsyncGenerator[object]:
+    async def get_result(self) -> cabc.AsyncGenerator[object]:
         if self.raises is not None:
             raise self.raises
 
@@ -116,41 +114,29 @@ class ArgsKwargs[**P, R]:
         self._registrar = registrar
 
     def called_with(self, *args: P.args, **kwargs: P.kwargs) -> Returns[R]:
-        expectation = Expectation(
-            method_name=self._method_name, args=args, kwargs=kwargs
-        )
+        expectation = Expectation(method_name=self._method_name, args=args, kwargs=kwargs)
         return Returns(expectation, self._registrar)
 
 
 class CoroutineArgsKwargs[**P, R](ArgsKwargs[P, R]):
     def awaited_with(self, *args: P.args, **kwargs: P.kwargs) -> Returns[R]:
-        expectation = CoroutineExpectation(
-            method_name=self._method_name, args=args, kwargs=kwargs
-        )
+        expectation = CoroutineExpectation(method_name=self._method_name, args=args, kwargs=kwargs)
         return Returns(expectation, self._registrar)
 
 
 class ContextManagerArgsKwargs[**P, R](ArgsKwargs[P, R]):
     def entered_with(self, *args: P.args, **kwargs: P.kwargs) -> Yields[R]:
-        expectation = ContextManagerExpectation(
-            method_name=self._method_name, args=args, kwargs=kwargs
-        )
+        expectation = ContextManagerExpectation(method_name=self._method_name, args=args, kwargs=kwargs)
         return Yields(expectation, self._registrar)
 
 
 class AsyncContextManagerArgsKwargs[**P, R](ArgsKwargs[P, R]):
     def async_entered_with(self, *args: P.args, **kwargs: P.kwargs) -> Yields[R]:
-        expectation = AsyncContextManagerExpectation(
-            method_name=self._method_name, args=args, kwargs=kwargs
-        )
+        expectation = AsyncContextManagerExpectation(method_name=self._method_name, args=args, kwargs=kwargs)
         return Yields(expectation, self._registrar)
 
 
-class AnyArgsKwargs[**P, R](
-    CoroutineArgsKwargs[P, R],
-    ContextManagerArgsKwargs[P, R],
-    AsyncContextManagerArgsKwargs[P, R],
-): ...
+class AnyArgsKwargs[**P, R](CoroutineArgsKwargs[P, R], ContextManagerArgsKwargs[P, R], AsyncContextManagerArgsKwargs[P, R]): ...
 
 
 @typing.final
@@ -178,9 +164,7 @@ class MockController[T]:
         unsatisfied: list[str] = []
         for method_name, expectations in self._expectations.items():
             if expectations:
-                unsatisfied.append(
-                    f"missing {len(expectations)} call(s) to '{method_name}'"
-                )
+                unsatisfied.append(f"missing {len(expectations)} call(s) to '{method_name}'")
 
         if unsatisfied:
             msg = f"Unsatisfied expectations:\n{'\n'.join(unsatisfied)}"
@@ -198,18 +182,13 @@ class _MockProxyImpl[T]:
 
     def __getattr__(self, name: str) -> object:
         if name.startswith("_") and not name.startswith("__"):
-            raise AttributeError(
-                f"'{type(self).__name__}' object has no attribute '{name}'"
-            )
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
         def _mock_method(*args: object, **kwargs: object) -> object:
             expectation = self._handler.pop_fifo_expectation(name)
 
             if expectation is None:
-                msg = (
-                    f"Unexpected call to '{name}' with args={args}, kwargs={kwargs}. "
-                    f"No expectation was set for this call."
-                )
+                msg = f"Unexpected call to '{name}' with args={args}, kwargs={kwargs}. No expectation was set for this call."
                 raise AssertionError(msg)
 
             self._assert_expectation_args(expectation, name, args, kwargs)
@@ -218,11 +197,7 @@ class _MockProxyImpl[T]:
         return _mock_method
 
     def _assert_expectation_args(
-        self,
-        expectation: Expectation,
-        method_name: str,
-        call_args: tuple[object, ...],
-        call_kwargs: dict[str, object],
+        self, expectation: Expectation, method_name: str, call_args: tuple[object, ...], call_kwargs: dict[str, object]
     ) -> None:
         want_kwargs = self._convert_args_to_kwargs(method_name, expectation.args)
         want_kwargs.update(expectation.kwargs)
@@ -239,27 +214,19 @@ class _MockProxyImpl[T]:
 
             got_value = got_kwargs[key]
             if got_value != want_value:
-                diffs.append(
-                    f"expected {key}={want_value!r}, but got {key}={got_value!r}"
-                )
+                diffs.append(f"expected {key}={want_value!r}, but got {key}={got_value!r}")
 
         for key in got_kwargs.keys():
             if key not in want_kwargs:
                 diffs.append(f"unexpected {key}={got_kwargs[key]!r}")
 
         if diffs:
-            raise AssertionError(
-                f"Unexpected args for '{method_name}':\n{'\n'.join(diffs)}"
-            )
+            raise AssertionError(f"Unexpected args for '{method_name}':\n{'\n'.join(diffs)}")
 
-    def _convert_args_to_kwargs(
-        self, method_name: str, args: tuple[object, ...]
-    ) -> dict[str, object]:
+    def _convert_args_to_kwargs(self, method_name: str, args: tuple[object, ...]) -> dict[str, object]:
         target_method = getattr(self._target, method_name, None)
         if not target_method:
-            raise AssertionError(
-                f"Method '{method_name}' not found on target type {self._target}"
-            )
+            raise AssertionError(f"Method '{method_name}' not found on target type {self._target}")
 
         if not args:
             return {}
@@ -282,43 +249,30 @@ class Mockamorph[T]:
     @typing.overload
     def expect[**P, R](
         self,
-        method: collections.Callable[
-            typing.Concatenate[T, P], typing.ContextManager[R]
-        ],
+        method: cabc.Callable[typing.Concatenate[T, P], typing.ContextManager[R]],
     ) -> ContextManagerArgsKwargs[P, R]: ...
 
     @typing.overload
     def expect[**P, R](
         self,
-        method: collections.Callable[
-            typing.Concatenate[T, P], typing.AsyncContextManager[R]
-        ],
+        method: cabc.Callable[typing.Concatenate[T, P], typing.AsyncContextManager[R]],
     ) -> AsyncContextManagerArgsKwargs[P, R]: ...
 
     @typing.overload
     def expect[**P, R](
         self,
-        method: collections.Callable[
-            typing.Concatenate[T, P],
-            collections.Awaitable[R],
-        ],
+        method: cabc.Callable[typing.Concatenate[T, P], cabc.Awaitable[R]],
     ) -> CoroutineArgsKwargs[P, R]: ...
 
     @typing.overload
     def expect[**P, R](
         self,
-        method: collections.Callable[typing.Concatenate[T, P], R],
+        method: cabc.Callable[typing.Concatenate[T, P], R],
     ) -> ArgsKwargs[P, R]: ...
 
     def expect[**P, R](
         self,
-        method: collections.Callable[
-            typing.Concatenate[T, P],
-            typing.ContextManager[R]
-            | typing.AsyncContextManager[R]
-            | collections.Awaitable[R]
-            | R,
-        ],
+        method: cabc.Callable[typing.Concatenate[T, P], typing.ContextManager[R] | typing.AsyncContextManager[R] | cabc.Awaitable[R] | R],
     ) -> ArgsKwargs[P, R]:
         if method.__name__.startswith("_"):
             raise AttributeError("Cannot set expectations on private attribute")
@@ -334,23 +288,13 @@ class Mockamorph[T]:
     def __enter__(self) -> Mockamorph[T]:
         return self
 
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: object,
-    ) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
         _ = exc_type, exc_val, exc_tb
         self.verify()
 
     async def __aenter__(self) -> Mockamorph[T]:
         return self
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: object,
-    ) -> None:
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
         _ = exc_type, exc_val, exc_tb
         self.verify()

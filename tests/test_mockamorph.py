@@ -154,9 +154,7 @@ def test_raises_configured_exception() -> None:
         def do_stuff(self) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.do_stuff).called_with().raises(
-            ValueError("test error")
-        )
+        ctrl.expect(SomeInterface.do_stuff).called_with().raises(ValueError("test error"))
 
         with pytest.raises(ValueError, match="test error"):
             _ = ctrl.get_mock().do_stuff()
@@ -168,9 +166,7 @@ def test_same_method_returns_or_raises() -> None:
 
     with Mockamorph(SomeInterface) as ctrl:
         ctrl.expect(SomeInterface.do_stuff).called_with(1).returns(10)
-        ctrl.expect(SomeInterface.do_stuff).called_with(2).raises(
-            ValueError("test error")
-        )
+        ctrl.expect(SomeInterface.do_stuff).called_with(2).raises(ValueError("test error"))
         mock = ctrl.get_mock()
 
         assert mock.do_stuff(1) == 10
@@ -217,9 +213,7 @@ def test_incorrect_args() -> None:
 
         with pytest.raises(
             AssertionError,
-            match=re.escape(
-                "Unexpected args for 'method_a':\nexpected x=1, but got x=2\nexpected y='test1', but got y='not-test'"
-            ),
+            match=re.escape("Unexpected args for 'method_a':\nexpected x=1, but got x=2\nexpected y='test1', but got y='not-test'"),
         ):
             # call with keyword args with wrong values
             ctrl.get_mock().method_a(x=2, y="not-test")
@@ -230,9 +224,7 @@ def test_method_with_nonmatching_args_no_sideeffect() -> None:
         def method_a(self, x: int, y: str) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.method_a).called_with(x=1, y="test1").raises(
-            RuntimeError("!!!")
-        )
+        ctrl.expect(SomeInterface.method_a).called_with(x=1, y="test1").raises(RuntimeError("!!!"))
 
         mock = ctrl.get_mock()
         with pytest.raises(AssertionError, match="Unexpected args for 'method_a'"):
@@ -334,9 +326,7 @@ def test_raises_custom_exception_with_attrs() -> None:
         def risky_operation(self) -> int: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.risky_operation).called_with().raises(
-            CustomError(404, "not found")
-        )
+        ctrl.expect(SomeInterface.risky_operation).called_with().raises(CustomError(404, "not found"))
 
         mock = ctrl.get_mock()
         with pytest.raises(CustomError) as exc_info:
@@ -397,9 +387,7 @@ def test_kwargs_only_args() -> None:
         def configure(self, *, host: str, port: int) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.configure).called_with(
-            host="localhost", port=8080
-        ).returns("ok")
+        ctrl.expect(SomeInterface.configure).called_with(host="localhost", port=8080).returns("ok")
 
         mock = ctrl.get_mock()
         assert mock.configure(host="localhost", port=8080) == "ok"
@@ -411,9 +399,7 @@ def test_alternating_returns_and_raises() -> None:
 
     with Mockamorph(SomeInterface) as ctrl:
         ctrl.expect(SomeInterface.process).called_with("good").returns("processed")
-        ctrl.expect(SomeInterface.process).called_with("bad").raises(
-            ValueError("invalid item")
-        )
+        ctrl.expect(SomeInterface.process).called_with("bad").raises(ValueError("invalid item"))
         ctrl.expect(SomeInterface.process).called_with("good2").returns("processed2")
 
         mock = ctrl.get_mock()
@@ -447,9 +433,7 @@ def test_private_attr_expectation_rejected() -> None:
         def _private_method(self) -> None: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        with pytest.raises(
-            AttributeError, match="Cannot set expectations on private attribute"
-        ):
+        with pytest.raises(AttributeError, match="Cannot set expectations on private attribute"):
             ctrl.expect(SomeInterface._private_method).called_with().returns(None)  # pyright: ignore[reportPrivateUsage]
 
 
@@ -480,9 +464,7 @@ def test_verify_lists_all_unsatisfied() -> None:
 
     with pytest.raises(
         AssertionError,
-        match=re.escape(
-            "Unsatisfied expectations:\nmissing 2 call(s) to 'foo'\nmissing 1 call(s) to 'bar'"
-        ),
+        match=re.escape("Unsatisfied expectations:\nmissing 2 call(s) to 'foo'\nmissing 1 call(s) to 'bar'"),
     ):
         ctrl.verify()
 
@@ -527,9 +509,7 @@ def test_retry_pattern_raises_then_returns() -> None:
         def retry_operation(self) -> str: ...
 
     with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.retry_operation).called_with().raises(
-            ConnectionError("failed")
-        )
+        ctrl.expect(SomeInterface.retry_operation).called_with().raises(ConnectionError("failed"))
         ctrl.expect(SomeInterface.retry_operation).called_with().returns("success")
 
         mock = ctrl.get_mock()
@@ -547,9 +527,7 @@ class TextFixtureMockamorpthInterface(Protocol):
 @pytest.fixture
 def mockamorph_fixture() -> Mockamorph[TextFixtureMockamorpthInterface]:
     ctrl = Mockamorph(TextFixtureMockamorpthInterface)
-    ctrl.expect(TextFixtureMockamorpthInterface.do_stuff).called_with().returns(
-        "Hello world"
-    )
+    ctrl.expect(TextFixtureMockamorpthInterface.do_stuff).called_with().returns("Hello world")
     return ctrl
 
 
@@ -596,9 +574,7 @@ async def test_async_method_raises() -> None:
         async def async_method(self) -> str: ...
 
     async with Mockamorph(SomeInterface) as ctrl:
-        ctrl.expect(SomeInterface.async_method).awaited_with().raises(
-            RuntimeError("Failed")
-        )
+        ctrl.expect(SomeInterface.async_method).awaited_with().raises(RuntimeError("Failed"))
 
         mock = ctrl.get_mock()
 
@@ -664,15 +640,11 @@ def test_wrong_keyword_arg_value() -> None:
         def set_option(self, *, name: str, value: int) -> None: ...
 
     with Mockamorph(SomeInterface) as mock:
-        mock.expect(SomeInterface.set_option).called_with(
-            name="debug", value=1
-        ).returns(None)
+        mock.expect(SomeInterface.set_option).called_with(name="debug", value=1).returns(None)
 
         with pytest.raises(
             AssertionError,
-            match=re.escape(
-                "Unexpected args for 'set_option':\nexpected value=1, but got value=0"
-            ),
+            match=re.escape("Unexpected args for 'set_option':\nexpected value=1, but got value=0"),
         ):
             mock.get_mock().set_option(name="debug", value=0)
 
@@ -686,9 +658,7 @@ def test_missing_required_arg() -> None:
 
         with pytest.raises(
             AssertionError,
-            match=re.escape(
-                "Unexpected args for 'fetch':\nexpected key='mykey', but 'key' is missing"
-            ),
+            match=re.escape("Unexpected args for 'fetch':\nexpected key='mykey', but 'key' is missing"),
         ):
             #  missing key parameter
             mock.get_mock().fetch()  # type: ignore[call-arg] # pyright: ignore[reportCallIssue]  # ty:ignore[missing-argument]
@@ -822,13 +792,9 @@ async def test_async_raises_and_returns_interleaved() -> None:
         async def call_api(self) -> str: ...
 
     async with Mockamorph(SomeInterface) as mock:
-        mock.expect(SomeInterface.call_api).awaited_with().raises(
-            ConnectionError("timeout")
-        )
+        mock.expect(SomeInterface.call_api).awaited_with().raises(ConnectionError("timeout"))
         mock.expect(SomeInterface.call_api).awaited_with().returns("success")
-        mock.expect(SomeInterface.call_api).awaited_with().raises(
-            ConnectionError("again")
-        )
+        mock.expect(SomeInterface.call_api).awaited_with().raises(ConnectionError("again"))
 
         m = mock.get_mock()
 
@@ -854,9 +820,7 @@ async def test_sync_expectation_for_async_method_works() -> None:
     async with Mockamorph(SomeInterface) as mock:
         mock.expect(SomeInterface.fetch).called_with().returns("some-value")
 
-        with pytest.raises(
-            TypeError, match="object str can't be used in 'await' expression"
-        ):
+        with pytest.raises(TypeError, match="object str can't be used in 'await' expression"):
             await AsyncUsecase().use(mock.get_mock())
 
 
@@ -945,9 +909,7 @@ def test_list_argument() -> None:
         def batch_process(self, items: list[int]) -> int: ...
 
     with Mockamorph(SomeInterface) as mock:
-        mock.expect(SomeInterface.batch_process).called_with([1, 2, 3, 4, 5]).returns(
-            15
-        )
+        mock.expect(SomeInterface.batch_process).called_with([1, 2, 3, 4, 5]).returns(15)
 
         assert mock.get_mock().batch_process([1, 2, 3, 4, 5]) == 15
 
@@ -978,9 +940,7 @@ def test_callable_argument() -> None:
         pass
 
     with Mockamorph(SomeInterface) as mock:
-        mock.expect(SomeInterface.register_callback).called_with(my_callback).returns(
-            None
-        )
+        mock.expect(SomeInterface.register_callback).called_with(my_callback).returns(None)
 
         mock.get_mock().register_callback(my_callback)
 
@@ -1010,12 +970,8 @@ def test_return_mock_object() -> None:
         Mockamorph(InnerService) as inner_mock,
         Mockamorph(OuterService) as outer_mock,
     ):
-        inner_mock.expect(InnerService.inner_method).called_with().returns(
-            "inner result"
-        )
-        outer_mock.expect(OuterService.get_inner).called_with().returns(
-            inner_mock.get_mock()
-        )
+        inner_mock.expect(InnerService.inner_method).called_with().returns("inner result")
+        outer_mock.expect(OuterService.get_inner).called_with().returns(inner_mock.get_mock())
 
         outer = outer_mock.get_mock()
         inner = outer.get_inner()
@@ -1121,9 +1077,7 @@ async def test_enter_async_context_manager() -> None:
                 return session
 
     async with Mockamorph(Transactor[Session]) as ctrl:
-        ctrl.expect(Transactor[Session].session).async_entered_with().yields(
-            Session(x=5)
-        )
+        ctrl.expect(Transactor[Session].session).async_entered_with().yields(Session(x=5))
 
         r = await Usecase(ctrl.get_mock()).do_stuff()
         assert r.x == 5
